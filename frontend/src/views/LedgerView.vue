@@ -211,11 +211,7 @@ onMounted(load)
       <button class="btn btn--ghost btn--sm" @click="detail = null">收起</button>
     </div>
     <div class="panel__body">
-      <div class="alert alert--info">
-        一笔账会同时记在两个方面：钱从哪个账户出、归到哪一类消费。
-        两边金额始终相等，所以账目不会因为漏记而对不上。
-      </div>
-      <div class="table-wrap" style="border-top: none">
+      <div class="table-wrap">
         <table>
           <thead>
             <tr>

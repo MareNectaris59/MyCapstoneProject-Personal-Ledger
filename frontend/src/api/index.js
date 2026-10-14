@@ -91,6 +91,24 @@ export const api = {
     http.get(`/subjects/${id}/entries`, { params: { limit } }),
   openingBalance: (id, payload) => http.post(`/subjects/${id}/opening-balance`, payload),
 
+  /**
+   * 新增科目。账户管理与记账表单里的「+ 新建分类」共用这一个接口。
+   *
+   * 只传 name / subjectType / accountKind —— 编码、层级、层级路径、余额方向
+   * 全部由后端按规则生成。用户不需要知道这些内部概念。
+   *
+   * @param payload { name, subjectType: 'ASSET'|'EXPENSE'|'INCOME',
+   *                  accountKind?, parentId? }
+   */
+  createSubject: (payload) => http.post('/subjects', payload),
+
+  /** 启用 / 停用科目。停用后不再出现在记账下拉框，历史记录仍可查询。 */
+  setSubjectEnabled: (id, enabled) =>
+    http.put(`/subjects/${id}/enabled`, null, { params: { enabled } }),
+
+  /** 删除科目。存在子科目或已被账目引用时后端会拒绝（错误码 1302 / 1303）。 */
+  deleteSubject: (id) => http.delete(`/subjects/${id}`),
+
   // ---- 记账 ----
   postExpense: (payload) => http.post('/ledgers/expense', payload),
   postIncome: (payload) => http.post('/ledgers/income', payload),

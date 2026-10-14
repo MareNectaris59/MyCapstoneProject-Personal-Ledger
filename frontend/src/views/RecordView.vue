@@ -1,12 +1,16 @@
 <script setup>
 /**
- * 记一笔：支出 / 收入 / 转账，带实时天平式分录预览。
+ * 记一笔：支出 / 收入 / 转账，带实时分录预览。
  *
  * 三种业务的分录结构（见 docs/系统设计说明书.md §5.1.3）：
  *   支出   借 费用科目 ／ 贷 资产科目
  *   收入   借 资产科目 ／ 贷 收入科目
  *   转账   借 转入资产 ／ 贷 转出资产
  * 预览由 BalanceScale 渲染，金额一变就重算，用户按下"记账"前就能看到是否平衡。
+ *
+ * 这一页同时承担了「分类管理」的职责（原「分类与账户」页已删除）：
+ * 分类下拉框本身就是分类列表，旁边一个「+ 新建」即可就地新增。
+ * 这样用户不必为了加一个消费类别而跳到一个讲会计概念的页面去。
  */
 import { ref, reactive, computed } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -16,7 +20,7 @@ import { today } from '@/utils/format'
 import BalanceScale from '@/components/BalanceScale.vue'
 
 const auth = useAuthStore()
-const { accounts, expenseLeaves, incomeLeaves } = storeToRefs(auth)
+const { accounts, expenseLeaves, incomeLeaves, expenseTree, incomeTree } = storeToRefs(auth)
 
 const TABS = [
   { key: 'expense', label: '支出' },
@@ -26,6 +30,47 @@ const TABS = [
 
 const tab = ref('expense')
 const busy = ref(false)
+
+/* ---------------- 就地新建分类 ---------------- */
+const newCategory = reactive({ type: '', name: '', parentId: '' })
+const savingCategory = ref(false)
+
+/** 可作为父级的分类：树里非叶子的一级节点（餐饮、交通……） */
+const expenseGroups = computed(() =>
+  (expenseTree.value || []).filter((n) => !n.leaf).map((n) => ({ id: n.id, name: n.name }))
+)
+
+function openNewCategory(type) {
+  newCategory.type = type
+  newCategory.name = ''
+  newCategory.parentId = ''
+}
+
+async function saveCategory() {
+  const name = newCategory.name.trim()
+  if (!name) {
+    auth.notify('error', '请输入分类名称')
+    return
+  }
+  savingCategory.value = true
+  try {
+    const created = await api.createSubject({
+      name,
+      subjectType: newCategory.type,
+      parentId: newCategory.parentId ? Number(newCategory.parentId) : null
+    })
+    await auth.loadSubjects()
+    // 创建后直接选中，用户不必再去下拉框里找
+    if (newCategory.type === 'EXPENSE') form.expenseSubjectId = created.id
+    else form.incomeSubjectId = created.id
+    auth.notify('ok', `已创建分类「${name}」`)
+    newCategory.type = ''
+  } catch (e) {
+    auth.notify('error', e.message)
+  } finally {
+    savingCategory.value = false
+  }
+}
 
 const form = reactive({
   amount: '',
@@ -170,7 +215,12 @@ async function submit() {
 
         <template v-if="tab === 'expense'">
           <div class="field">
-            <label class="field__label" for="expense-subject">支出科目（消费分类）</label>
+            <div class="flex-between">
+              <label class="field__label" for="expense-subject">支出分类</label>
+              <button type="button" class="btn--ghost btn--sm" @click="openNewCategory('EXPENSE')">
+                + 新建
+              </button>
+            </div>
             <select id="expense-subject" v-model="form.expenseSubjectId">
               <option value="">请选择</option>
               <option v-for="s in expenseLeaves" :key="s.id" :value="s.id">
@@ -178,6 +228,35 @@ async function submit() {
               </option>
             </select>
           </div>
+
+          <!-- 就地新建分类：不跳页、不暴露编码/层级等内部概念 -->
+          <div v-if="newCategory.type === 'EXPENSE'" class="panel" style="box-shadow: var(--shadow-inset); background: var(--surface-2)">
+            <div class="panel__body" style="padding: var(--sp-4)">
+              <div class="field mb-0">
+                <label class="field__label" for="new-cat-name">新分类名称</label>
+                <input
+                  id="new-cat-name"
+                  v-model="newCategory.name"
+                  placeholder="如：宠物、订阅服务"
+                  @keyup.enter="saveCategory"
+                />
+              </div>
+              <div class="field" style="margin-top: 12px">
+                <label class="field__label" for="new-cat-parent">归到哪一类（可不选）</label>
+                <select id="new-cat-parent" v-model="newCategory.parentId">
+                  <option value="">作为一级分类</option>
+                  <option v-for="p in expenseGroups" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
+              </div>
+              <button type="button" :disabled="savingCategory" @click="saveCategory">
+                {{ savingCategory ? '创建中…' : '创建并使用' }}
+              </button>
+              <button type="button" class="btn--ghost" style="margin-left: 8px" @click="newCategory.type = ''">
+                取消
+              </button>
+            </div>
+          </div>
+
           <div class="field">
             <label class="field__label" for="expense-asset">付款账户</label>
             <select id="expense-asset" v-model="form.assetSubjectId">
@@ -196,13 +275,40 @@ async function submit() {
             </select>
           </div>
           <div class="field">
-            <label class="field__label" for="income-subject">收入科目</label>
+            <div class="flex-between">
+              <label class="field__label" for="income-subject">收入分类</label>
+              <button type="button" class="btn--ghost btn--sm" @click="openNewCategory('INCOME')">
+                + 新建
+              </button>
+            </div>
             <select id="income-subject" v-model="form.incomeSubjectId">
               <option value="">请选择</option>
               <option v-for="s in incomeLeaves" :key="s.id" :value="s.id">
                 {{ s.label }}
               </option>
             </select>
+          </div>
+
+          <div v-if="newCategory.type === 'INCOME'" class="panel" style="box-shadow: var(--shadow-inset); background: var(--surface-2)">
+            <div class="panel__body" style="padding: var(--sp-4)">
+              <div class="field mb-0">
+                <label class="field__label" for="new-inc-name">新分类名称</label>
+                <input
+                  id="new-inc-name"
+                  v-model="newCategory.name"
+                  placeholder="如：稿费、红包"
+                  @keyup.enter="saveCategory"
+                />
+              </div>
+              <div style="margin-top: 12px">
+                <button type="button" :disabled="savingCategory" @click="saveCategory">
+                  {{ savingCategory ? '创建中…' : '创建并使用' }}
+                </button>
+                <button type="button" class="btn--ghost" style="margin-left: 8px" @click="newCategory.type = ''">
+                  取消
+                </button>
+              </div>
+            </div>
           </div>
         </template>
 
@@ -221,7 +327,7 @@ async function submit() {
               <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
             <div class="field__hint">
-              转账只是在两个账户之间挪钱，不算消费，也不会影响预算
+              不算消费，不影响预算
             </div>
           </div>
         </template>

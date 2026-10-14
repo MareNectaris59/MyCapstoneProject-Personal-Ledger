@@ -35,12 +35,6 @@ const routes = [
     meta: { title: '账目' }
   },
   {
-    path: '/subjects',
-    name: 'subjects',
-    component: () => import('@/views/SubjectView.vue'),
-    meta: { title: '分类与账户' }
-  },
-  {
     path: '/settings',
     name: 'settings',
     component: () => import('@/views/SettingsView.vue'),

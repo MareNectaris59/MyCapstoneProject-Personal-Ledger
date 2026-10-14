@@ -5,10 +5,13 @@
  * 目前只有注销账号一项 —— 系统中唯一不可逆的操作，所以单独成页，
  * 不和日常记账功能混在一起，避免误触。
  *
- * 交互上做了三重防误操作：
- *   1. 危险区先折叠，需要主动点开
- *   2. 必须手动输入「注销账号」四个字，不能只点按钮
- *   3. 必须输入登录密码（后端也会二次校验）
+ * 确认方式：**输入注册邮箱** + 输入登录密码。两道各自表达不同的事：
+ *   - 邮箱证明"你是这个账号的主人"（邮箱是账号的唯一标识）
+ *   - 密码证明"你是本人"（防止设备被他人短暂接触）
+ *
+ * 上一版要求用户逐字输入「注销账号」四个字。那个模式（GitHub 用仓库名、
+ * Vercel 用项目名）适用于批量或破坏性删除，用在"注销自己的账号"上很别扭 ——
+ * 用户会想"我当然知道我要注销，为什么还要我抄一遍"。
  */
 import { ref, computed } from 'vue'
 import { api } from '@/api'
@@ -17,21 +20,30 @@ import { useAuthStore } from '@/stores/auth'
 const auth = useAuthStore()
 
 const expanded = ref(false)
-const confirmText = ref('')
+const emailInput = ref('')
 const password = ref('')
 const reason = ref('')
 const busy = ref(false)
 const errorMsg = ref('')
 
-/** 需要用户逐字输入的确认短语 */
-const CONFIRM_PHRASE = '注销账号'
+/** 邮箱比对不区分大小写 —— 用户不该因为大小写被拦住 */
+const emailMatches = computed(() => {
+  const registered = (auth.user?.email || '').trim().toLowerCase()
+  const typed = emailInput.value.trim().toLowerCase()
+  return registered.length > 0 && typed === registered
+})
+
+/** 只有当用户输入了东西、但和注册邮箱不一致时才提示，避免一上来就报错 */
+const emailWrong = computed(
+  () => emailInput.value.trim().length > 0 && !emailMatches.value
+)
 
 const canSubmit = computed(
-  () => confirmText.value.trim() === CONFIRM_PHRASE && password.value.length > 0 && !busy.value
+  () => emailMatches.value && password.value.length > 0 && !busy.value
 )
 
 function reset() {
-  confirmText.value = ''
+  emailInput.value = ''
   password.value = ''
   reason.value = ''
   errorMsg.value = ''
@@ -45,7 +57,7 @@ async function doDelete() {
   try {
     await api.deleteAccount({ password: password.value, reason: reason.value })
     // 注销成功后本次会话已失效，直接清空本地状态回登录页。
-    // 不复用 auth.logout()，因为它会再去调 /auth/logout —— 此时令牌已被吊销，
+    // 不复用 auth.logout()，因为它会再调 /auth/logout —— 此时令牌已被吊销，
     // 那个请求必然失败，只会产生一条误导性的错误日志。
     sessionStorage.clear()
     auth.user = null
@@ -68,7 +80,7 @@ async function doDelete() {
 
   <div class="panel">
     <div class="panel__head">账号信息</div>
-    <div class="panel__body">
+    <div class="panel__body" style="padding-top: 0">
       <table>
         <tbody>
           <tr>
@@ -80,7 +92,7 @@ async function doDelete() {
             <td class="mono">{{ auth.user?.email || '—' }}</td>
           </tr>
           <tr>
-            <td class="muted">本周起始日</td>
+            <td class="muted">每周起始日</td>
             <td>{{ auth.user?.weekStart === 7 ? '周日' : '周一' }}</td>
           </tr>
         </tbody>
@@ -88,72 +100,62 @@ async function doDelete() {
     </div>
   </div>
 
-  <div class="panel">
-    <div class="panel__head" style="background: var(--c-red); color: #fff; border-color: var(--color-border)">
-      危险操作
-    </div>
-    <div class="panel__body">
-      <p style="margin-top: 0">
-        <b>注销账号会删除你的账号，这不是退出登录。</b>
-      </p>
-      <ul class="muted" style="font-size: 13px; line-height: 1.9; margin: 0 0 12px; padding-left: 20px">
-        <li>账号立即失效，<b>无法再登录</b>，也无法找回</li>
-        <li>昵称、头像、邮箱等个人信息会被清除</li>
-        <li>你的账务记录（收支流水）会被保留但无法再访问</li>
-        <li>该邮箱之后可以重新注册一个全新账号，但旧数据不会恢复</li>
-      </ul>
+  <div class="danger-zone">
+    <h3>注销账号</h3>
+    <p>注销会删除你的账号，<b>这不是退出登录</b>。</p>
+    <p class="muted" style="font-size: 13px">
+      账号立即失效且无法找回，昵称、头像、邮箱等个人信息会被清除。<br />
+      你的账务记录会被保留但无法再访问。
+    </p>
 
-      <button v-if="!expanded" class="btn--danger" @click="expanded = true">
-        我要注销账号
+    <button v-if="!expanded" class="btn--danger" style="margin-top: 12px" @click="expanded = true">
+      我要注销账号
+    </button>
+
+    <template v-else>
+      <div v-if="errorMsg" class="alert alert--error" style="margin-top: 12px">{{ errorMsg }}</div>
+
+      <div class="field" style="margin-top: 16px">
+        <label class="field__label" for="confirm-email">输入你的注册邮箱以确认</label>
+        <input
+          id="confirm-email"
+          v-model="emailInput"
+          type="email"
+          autocomplete="off"
+          :placeholder="auth.user?.email || 'you@example.com'"
+        />
+        <div v-if="emailWrong" class="field__hint" style="color: var(--danger-text)">
+          与注册邮箱不一致
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="confirm-pwd">登录密码</label>
+        <input
+          id="confirm-pwd"
+          v-model="password"
+          type="password"
+          autocomplete="current-password"
+          placeholder="用于确认是你本人"
+        />
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="confirm-reason">注销原因（选填）</label>
+        <input id="confirm-reason" v-model="reason" maxlength="255" placeholder="帮助我们改进" />
+      </div>
+
+      <button class="btn--danger" :disabled="!canSubmit" @click="doDelete">
+        {{ busy ? '正在注销…' : '确认注销账号' }}
       </button>
-
-      <template v-else>
-        <div class="alert alert--error">
-          请确认这是你本人的操作，并且已经不再需要这个账号里的数据。
-        </div>
-
-        <div v-if="errorMsg" class="alert alert--error">{{ errorMsg }}</div>
-
-        <div class="field">
-          <label class="field__label" for="confirm-text">
-            请输入「{{ CONFIRM_PHRASE }}」以确认
-          </label>
-          <input
-            id="confirm-text"
-            v-model="confirmText"
-            autocomplete="off"
-            :placeholder="CONFIRM_PHRASE"
-          />
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="confirm-pwd">登录密码</label>
-          <input
-            id="confirm-pwd"
-            v-model="password"
-            type="password"
-            autocomplete="current-password"
-            placeholder="用于确认是你本人"
-          />
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="confirm-reason">注销原因（选填）</label>
-          <input id="confirm-reason" v-model="reason" maxlength="255" placeholder="帮助我们改进" />
-        </div>
-
-        <button class="btn--danger" :disabled="!canSubmit" @click="doDelete">
-          {{ busy ? '正在注销…' : '确认注销账号' }}
-        </button>
-        <button
-          class="btn btn--ghost"
-          style="margin-left: 8px"
-          :disabled="busy"
-          @click="expanded = false; reset()"
-        >
-          取消
-        </button>
-      </template>
-    </div>
+      <button
+        class="btn--ghost"
+        style="margin-left: 8px"
+        :disabled="busy"
+        @click="expanded = false; reset()"
+      >
+        取消
+      </button>
+    </template>
   </div>
 </template>

@@ -1,9 +1,9 @@
 <script setup>
 /**
- * 顶部横幅式通知。
+ * 浮起的黏土胶囊通知（右下角）。
  *
- * 用整条横幅而不是右上角小提示：Brutalism 的语言是"大块、强对比"，
- * 小圆角提示条与整体风格不搭。
+ * 上一版 Brutalism 用的是顶部整条横幅 —— 那种强入侵感与柔和风格冲突，
+ * 改为右下角浮起的小胶囊，配 theme.css 的 --clay-lg 阴影。
  */
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
@@ -27,13 +27,15 @@ const cls = (type) => ({
 </template>
 
 <style scoped>
-.toast-enter-active,
+.toast-enter-active {
+  transition: transform var(--t-base) var(--ease-bounce), opacity var(--t-fast);
+}
 .toast-leave-active {
-  transition: transform 120ms ease-out, opacity 120ms ease-out;
+  transition: transform var(--t-fast) ease-in, opacity var(--t-fast) ease-in;
 }
 .toast-enter-from,
 .toast-leave-to {
-  transform: translateY(-100%);
+  transform: translateY(12px) scale(0.96);
   opacity: 0;
 }
 </style>
