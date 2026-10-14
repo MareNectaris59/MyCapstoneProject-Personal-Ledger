@@ -2,6 +2,9 @@
 
 基于 Spring Boot 3 + Vue 3 的个人复式记账系统。账务内核采用**复式记账**：每笔业务至少两条分录，借贷必须平衡，保证账户资金变动的一致性。
 
+> **接手这个项目的人（或 AI 会话）请先读 [HANDOFF.md](HANDOFF.md)** ——
+> 那里记录了当前进度、环境陷阱清单（PowerShell / Maven / 日志的坑）与关键设计决策。
+
 ## 当前状态
 
 | 部分 | 状态 |
@@ -156,18 +159,22 @@ powershell -ExecutionPolicy Bypass -File .\test-subject-api.ps1      # 科目增
 ```
 .
 ├── .gitignore                      只提交结构导出，不提交含凭据的完整导出
-├── backup-db.ps1                   ★ 一键导出数据库到 db\dump\
+├── HANDOFF.md                      ★ 跨会话交接：进度、环境陷阱、设计决策
+├── setup.ps1                       ★ 一键环境初始化（检查工具链 → 建库 → 构建）
+├── backup-db.ps1                   一键导出数据库到 db\dump\
 ├── db/
 │   └── dump/                       .sql 导出（-schema 结尾的可提交）
 ├── docs/
 │   ├── 系统设计说明书.md           需求、用例、架构、接口、算法口径、验收标准
 │   ├── 数据库设计.md               表结构、索引、DDL、关键 SQL、预置科目模板
-│   ├── 前端Brutalism改造说明书.md   设计令牌来源、组件规范
+│   ├── 前端改版方案.md             Claymorphism 改版依据、两处偏离技能规范的理由
+│   ├── 前端Brutalism改造说明书.md   上一版风格的令牌来源（历史）
 │   ├── 数据库备份说明.md           dump vs 搬 datadir 的取舍、还原方法
+│   ├── 环境搭建与部署.md           换机器/拷 U 盘的完整流程、常见问题
 │   └── 网络环境说明.md             离线运行的影响与修复记录（历史）
 ├── backend/
 │   ├── pom.xml                     Spring Boot 3.3.5 父 POM
-│   ├── settings.xml                ★ IDEA 与命令行共用的 Maven 配置
+│   ├── settings.xml.optional       可选的阿里云镜像配置（默认不生效，需手动指定）
 │   ├── test-api.ps1                69 项端到端验收测试
 │   ├── test-delete-account.ps1     账号注销流程测试
 │   ├── test-subject-api.ps1        科目增删改与编码生成测试
