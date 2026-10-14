@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人复式记账与消费分析系统</title>
+  <!--
+    字体：Fira Sans（界面）+ Fira Code（数字 / 金额 / 科目编码）。
+    取自 ui-ux-pro-max-skill 的 typography.csv 中 "Dashboard Data" 搭配 ——
+    该条目 Best For 明确写着 "Dashboards, analytics, data visualization, admin panels"。
+    preconnect 让字体握手与站点加载并行，减少首屏字体闪烁。
+    离线或无外网时自动回退到系统中文字体，不影响使用。
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap">
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

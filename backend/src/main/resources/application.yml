@@ -1,0 +1,118 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+  # 生产环境部署在 Nginx 之后时打开，让应用正确识别客户端协议与 IP
+  forward-headers-strategy: none
+
+spring:
+  application:
+    name: personal-ledger
+
+  # ---------------- 数据源 ----------------
+  # 全部可用环境变量覆盖，因此换机器时不必修改本文件（见 docs/环境搭建与部署.md）。
+  # 冒号后面是默认值，与本机开发环境一致。
+  #   DB_HOST / DB_PORT / DB_NAME / DB_USERNAME / DB_PASSWORD
+  # 例如在新机器上：
+  #   set DB_PASSWORD=别的密码
+  #   java -jar target\personal-ledger-1.0.0-SNAPSHOT.jar
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # 注意 characterEncoding 必须写 Java 的字符集名 UTF-8，
+    # 不能写 MySQL 的 utf8mb4 —— Connector/J 会当成 Java charset 去查找，
+    # 写成 utf8mb4 会直接抛 Unsupported character encoding。
+    # 服务端的 utf8mb4 由连接协商决定，无需在此指定。
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:personal_ledger}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:123456}
+    hikari:
+      pool-name: ledger-pool
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 10000
+      idle-timeout: 600000
+      max-lifetime: 1740000
+
+  # ---------------- SQL 初始化 ----------------
+  # 结构由 Flyway 管理，不再用 spring.sql.init（两者都建表会冲突）。
+  # db/schema.sql 保留作为"手工执行/快速重建"的参考脚本。
+  sql:
+    init:
+      mode: never
+
+  # ---------------- Flyway 数据库迁移 ----------------
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # 关键：本项目的 11 张表最初由 db/schema.sql 手工创建，早于 Flyway 接入，
+    # 因此库里是"非空但没有 flyway_schema_history 表"。Flyway 默认会拒绝启动。
+    # 开启基线后，它会为 V1 建立历史记录而不实际执行 V1 的 SQL。
+    baseline-on-migrate: true
+    baseline-version: 1
+    baseline-description: "baseline: 11 tables created by db/schema.sql"
+    # 迁移脚本里已有完整 DDL，不需要 Flyway 再包事务（MySQL DDL 隐式提交）
+    validate-on-migrate: true
+    out-of-order: false
+
+  # ---------------- Redis ----------------
+  # 本机未安装 Redis。骨架通过 app.cache.type=memory 使用进程内缓存实现，
+  # 因此这里不做任何连接。装上 Redis 后把 app.cache.type 改为 redis 即可。
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 3000ms
+      lettuce:
+        shutdown-timeout: 100ms
+
+  jackson:
+    default-property-inclusion: always
+
+# ---------------- MyBatis-Plus ----------------
+mybatis-plus:
+  configuration:
+    # 开启下划线到驼峰的自动映射：signed_amount -> signedAmount
+    map-underscore-to-camel-case: true
+    # SQL 日志默认关闭。需要核对借贷平衡校验与余额更新的实际语句时，
+    # 把下面这行改成 org.apache.ibatis.logging.stdout.StdOutImpl。
+    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    banner: false
+    db-config:
+      # 逻辑删除字段（subject / sys_user / budget 使用）
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+      id-type: auto
+
+# ---------------- 应用自定义配置 ----------------
+app:
+  jwt:
+    # 至少 32 字节（256 位），HS256 的硬性要求。
+    # 生产环境务必通过环境变量 APP_JWT_SECRET 覆盖，不要把真实密钥提交进版本库。
+    secret: ${APP_JWT_SECRET:dev-only-secret-key-change-me-in-production-32bytes}
+    access-token-seconds: 1800      # 30 分钟
+    refresh-token-seconds: 1209600  # 14 天
+  auth:
+    # 邮件服务未接入，开发期跳过验证码校验。接入 SMTP 后置为 false。
+    skip-email-verify: true
+  cache:
+    # memory | redis —— 本机无 Redis，默认走内存实现
+    type: memory
+
+# ---------------- 日志 ----------------
+logging:
+  level:
+    root: INFO
+    com.example.ledger: DEBUG
+    # 排查鉴权问题时把下面这行打开，可以看到每个请求的过滤链决策
+    # org.springframework.security: DEBUG
+    # Redis 未安装时，Lettuce 的噪音日志会刷屏，这里压掉
+    io.lettuce: WARN
+    org.springframework.data.redis: WARN
+  pattern:
+    # 把 traceId 打进每条日志，便于按一次请求串联排查
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{36} - %msg%n"

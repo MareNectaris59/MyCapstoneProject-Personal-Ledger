@@ -1,0 +1,69 @@
+# =============================================================================
+#  Git ignore rules.
+#
+#  目标：项目拷到 U 盘、换台电脑也能直接构建运行。
+#  因此凡是"能重新生成"或"与机器绑定"的东西都不提交。
+# =============================================================================
+
+# ---- 构建产物（可重新生成）----
+target/
+dist/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# ---- 依赖目录 ----
+node_modules/
+.pnpm-store/
+
+# 第三方技能包（ui-ux-pro-max-skill）。它是设计参考工具，692 个文件 / 21 MB，
+# 与项目运行无关，不应进版本库。
+# 设计令牌的来源与检索命令已记录在 docs/前端Brutalism改造说明书.md §0，
+# 即使没有这个目录也能看懂设计是怎么定下来的。
+.skills/
+
+# 可离线携带的 Maven 仓库（由 pom.xml 的 portable-offline-repo profile 自动启用）。
+# 只有需要"无网也能构建"时才创建它，体积约 200-400MB，不适合提交：
+#   mvn -B -Dmaven.repo.local=".m2-portable" dependency:go-offline
+.m2-portable/
+
+# 历史遗留的缓存目录（已移到 D:\m2repo 与 D:\npm-cache，保留规则以防回来）
+.m2repo/
+.npm-cache/
+.pnpm-store/
+
+# ---- IDE ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+
+# ---- 日志与临时文件 ----
+logs/
+*.log
+*.tmp
+*.bak
+*~
+*.orig
+
+# ---- 数据库导出 ----
+# 完整导出含测试邮箱与 BCrypt 密码哈希，不应提交。
+# 只提交结构导出（文件名以 -schema 结尾）。
+db/dump/*.sql
+!db/dump/*-schema.sql
+
+# ---- 敏感配置 ----
+# application.yml 里的数据库口令与 JWT 密钥属于开发默认值，
+# 生产环境必须用环境变量覆盖（见 README）。
+# 若将来建立 application-local.yml 存放真实凭据，在此忽略它：
+# application-local.yml
+# application-prod.yml
+
+# ---- 误入的缓存/系统文件 ----
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+  可选的 Maven 镜像配置（默认不使用）
+  ============================================================================
+
+  这个文件**不会被自动加载**。只有当你显式指定时 Maven 才会读它：
+
+      mvn -s settings.xml.optional clean package
+
+  或者在 IDEA 里：
+      Settings - Build, Execution, Deployment - Build Tools - Maven
+        User settings file -> <项目>\backend\settings.xml.optional
+
+  什么时候需要它？
+    默认情况下 Maven 从中央仓库（repo1.maven.org）下载依赖。国内网络访问
+    中央仓库可能很慢或超时，这时改用阿里云镜像会快很多。
+
+  为什么改名成 settings.xml.optional？
+    原名 settings.xml 会被 IDEA 与命令行自动识别，而它曾经写死了
+      <localRepository>D:\m2repo</localRepository>
+    那是个绝对路径 —— 拷到别的电脑、换个盘符就失效，是项目可移植性最大的
+    障碍。现在本地仓库位置交给 pom.xml 里的 portable-offline-repo profile
+    处理（相对项目根目录），这个文件只负责镜像，且必须手动启用。
+
+  安全提示：
+    这里用 HTTPS 的阿里云镜像。不要改成 http:// 明文地址 ——
+    依赖内容可被中间人篡改。
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+
+  <mirrors>
+    <mirror>
+      <id>aliyun-public</id>
+      <mirrorOf>*</mirrorOf>
+      <name>Aliyun public repository (HTTPS)</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+    </mirror>
+  </mirrors>
+
+</settings>

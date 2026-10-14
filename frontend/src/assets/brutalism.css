@@ -1,0 +1,702 @@
+/* ==========================================================================
+   设计令牌（Design Tokens）—— Brutalism / Neubrutalism
+   ==========================================================================
+
+   本文件的配色、边框、阴影、字体全部来自 ui-ux-pro-max-skill 的实际检索输出：
+
+     --domain style  "neubrutalism bold borders thick shadows"
+       → 命中 styles.csv 的 Neubrutalism 条目：
+         Primary Colors: #FFEB3B(黄) #FF5252(红) #2196F3(蓝) #000000(黑边)
+         Effects:  box-shadow: 4px 4px 0 #000 / border: 3px solid #000
+                   no gradients / sharp corners (0px) / bold typography
+         Variables: --border-width:3px --shadow-offset:4px --shadow-color:#000
+         Accessibility: 要求 contrast-text-4.5、keyboard、visible-focus、
+                        reduced-motion
+
+     --domain typography  "data dense dashboard numeric tabular monospace table"
+       → 命中 "Dashboard Data"：Fira Code + Fira Sans
+         （Best For: Dashboards, analytics, data visualization, admin panels）
+
+   两处刻意的对比度修正（技能要求 4.5:1，原色板不满足）：
+     1. 技能的蓝 #2196F3 配白字仅 3.1:1 → 改用 #1F6FEB（4.63:1）
+     2. 技能的红 #FF5252 配白字仅 3.0:1 → 改用 #E53935（4.23:1），
+        仍然不足时提高字重到 700 并放大字号（大字号的 AA 门槛是 3:1）
+     3. 新增的绿 #00C853 / #2E7D32 配白字分别为 1.9:1 / 5.1:1
+        → 绿底一律配黑字或使用深绿配白字
+   ========================================================================== */
+
+:root {
+  /* ---- 颜色 ---------------------------------------------------------- */
+  /* 技能原始色 */
+  --c-yellow: #ffeb3b;      /* Primary —— 主操作、借贷平衡高亮 */
+  --c-red: #ff5252;         /* Danger  —— 超支、冲正、错误 */
+  --c-blue: #2196f3;        /* Secondary —— 链接、转账 */
+  --c-black: #000000;       /* 边框、文字、阴影 */
+
+  /* 对比度修正后的可用变体 */
+  --c-blue-ink: #1f6feb;    /* 蓝底白字 4.63:1，达 AA */
+  --c-red-ink: #e53935;     /* 红底白字（配粗体） */
+  --c-green: #00c853;       /* 绿底配黑字 */
+  --c-green-ink: #2e7d32;   /* 绿底白字 5.1:1 */
+
+  /* 语义令牌（对标技能的 --color-* 命名） */
+  --color-background: #ffffff;
+  --color-foreground: var(--c-black);
+  --color-card: #ffffff;
+  --color-muted: #f2f2f2;
+  --color-muted-foreground: #5a5a5a;   /* 白底 7.0:1 */
+  --color-border: var(--c-black);
+
+  --color-primary: var(--c-yellow);
+  --color-on-primary: var(--c-black);  /* 黄底黑字 17.9:1 */
+
+  --color-secondary: var(--c-blue-ink);
+  --color-on-secondary: #ffffff;
+
+  --color-danger: var(--c-red-ink);
+  --color-on-danger: #ffffff;
+
+  --color-success: var(--c-green-ink);
+  --color-on-success: #ffffff;
+
+  --color-focus: var(--c-blue-ink);
+
+  /* ---- 边框与阴影 ----------------------------------------------------- */
+  --border-width: 3px;
+  --border-width-thin: 2px;
+  --border: var(--border-width) solid var(--color-border);
+  --border-thin: var(--border-width-thin) solid var(--color-border);
+
+  --shadow-offset: 4px;
+  --shadow-color: var(--color-border);
+  --shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow-color);
+  --shadow-sm: 2px 2px 0 var(--shadow-color);
+
+  --radius: 0;   /* Brutalism 硬性特征：全站 0 圆角 */
+
+  /* ---- 字体 ---------------------------------------------------------- */
+  /* Fira 不含中文字形，必须回退到中文字体，否则科目名会掉到浏览器默认字体、
+     破坏等宽数字的对齐 */
+  --font-sans: 'Fira Sans', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB',
+               system-ui, -apple-system, sans-serif;
+  --font-mono: 'Fira Code', 'Consolas', 'SF Mono', 'Cascadia Mono', monospace;
+
+  /* ---- 字阶（技能 density=7 对应标准密度）----------------------------- */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 14px;
+  --fs-md: 16px;
+  --fs-lg: 20px;
+  --fs-xl: 28px;
+  --fs-2xl: 40px;
+
+  /* ---- 间距（4 的倍数）------------------------------------------------ */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* ---- 动效 ---------------------------------------------------------- */
+  /* 技能要求尊重 prefers-reduced-motion，见文件末尾 */
+  --t-fast: 80ms;
+  --t-base: 120ms;
+}
+
+/* ==========================================================================
+   基础
+   ========================================================================== */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 数字、金额、编码一律等宽 —— 账本的基本要求：金额必须纵向对齐 */
+.num, .mono, .amount, code, kbd {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.25;
+}
+h1 { font-size: var(--fs-lg); }
+h2 { font-size: var(--fs-xl); }
+h3 { font-size: var(--fs-md); }
+
+a { color: var(--color-secondary); }
+
+/* 技能 Accessibility 要求：可见焦点，且不得为了美观移除 focus ring */
+:focus-visible {
+  outline: var(--border-width) solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   布局
+   ========================================================================== */
+
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 216px;
+  flex-shrink: 0;
+  background: var(--color-foreground);
+  color: #fff;
+  border-right: var(--border);
+  padding: var(--sp-5) 0;
+}
+
+.sidebar__brand {
+  padding: 0 var(--sp-5) var(--sp-5);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-bottom: var(--border-width-thin) solid #fff;
+  margin-bottom: var(--sp-4);
+}
+
+.sidebar__link {
+  display: block;
+  padding: var(--sp-3) var(--sp-5);
+  color: #d8d8d8;
+  text-decoration: none;
+  font-weight: 500;
+  border-left: var(--sp-1) solid transparent;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+/* 当前项：黄底黑字整块高亮（技能：primary colors + bold blocks） */
+.sidebar__link:hover {
+  background: #262626;
+  color: #fff;
+}
+.sidebar__link.router-link-active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-left-color: var(--color-primary);
+  font-weight: 700;
+}
+
+.sidebar__who {
+  margin-top: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5) 0;
+  border-top: var(--border-width-thin) solid #3a3a3a;
+  font-size: var(--fs-sm);
+  color: #9a9a9a;
+}
+.sidebar__who button {
+  margin-top: var(--sp-2);
+  width: 100%;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;              /* 允许内部表格横向滚动而不撑破布局 */
+  padding: var(--sp-5);
+  max-width: 1180px;
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
+}
+.page-head h2 { margin: 0; }
+
+/* ==========================================================================
+   卡片
+   ========================================================================== */
+
+.panel {
+  background: var(--color-card);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  margin-bottom: var(--sp-5);
+}
+
+.panel__head {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: var(--border-width-thin) solid var(--color-border);
+  background: var(--color-muted);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.panel__body { padding: var(--sp-4); }
+
+.grid { display: grid; gap: var(--sp-4); }
+.grid--2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.grid--4 { grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); }
+
+/* ==========================================================================
+   统计卡
+   ========================================================================== */
+
+.stat {
+  position: relative;
+  background: var(--color-card);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: var(--sp-4);
+  overflow: hidden;
+}
+
+/* 右下角几何色块 —— 纯装饰，呼应 Brutalism 的"结构外显" */
+.stat::after {
+  content: '';
+  position: absolute;
+  right: -18px;
+  bottom: -18px;
+  width: 56px;
+  height: 56px;
+  background: var(--color-primary);
+  border: var(--border-width-thin) solid var(--color-border);
+  transform: rotate(45deg);
+}
+
+.stat__label {
+  font-size: var(--fs-sm);
+  color: var(--color-muted-foreground);
+  font-weight: 500;
+}
+
+.stat__value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  line-height: 1.1;
+  margin-top: var(--sp-1);
+  font-variant-numeric: tabular-nums;
+}
+.stat__value--pos { color: var(--color-success); }
+.stat__value--neg { color: var(--color-danger); }
+
+/* ==========================================================================
+   按钮
+   ========================================================================== */
+
+button, .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-4);
+  min-height: 36px;                     /* 技能：可点区域要够大 */
+  font-family: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform var(--t-fast), box-shadow var(--t-fast);
+}
+
+/* 按下位移 —— Brutalism 的标志性交互：视觉上真的"按进去" */
+button:hover:not(:disabled), .btn:hover:not(.btn--disabled) {
+  transform: translate(var(--shadow-offset), var(--shadow-offset));
+  box-shadow: none;
+}
+button:active:not(:disabled) {
+  transform: translate(var(--shadow-offset), var(--shadow-offset));
+  box-shadow: none;
+}
+
+button:disabled {
+  background: #fff;
+  color: #8a8a8a;
+  border-style: dashed;
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+}
+
+.btn--ghost {
+  background: #fff;
+  color: var(--color-foreground);
+}
+.btn--danger {
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+}
+.btn--secondary {
+  background: var(--color-secondary);
+  color: var(--color-on-secondary);
+}
+.btn--sm {
+  min-height: 28px;
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-sm);
+  box-shadow: var(--shadow-sm);
+}
+.btn--sm:hover:not(:disabled) {
+  transform: translate(2px, 2px);
+}
+.btn--block { width: 100%; }
+
+/* ==========================================================================
+   表单
+   ========================================================================== */
+
+.field { margin-bottom: var(--sp-3); }
+
+.field__label {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-bottom: var(--sp-1);
+  text-transform: none;
+}
+
+.field__hint {
+  font-size: var(--fs-xs);
+  color: var(--color-muted-foreground);
+  margin-top: var(--sp-1);
+}
+
+input, select, textarea {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  min-height: 38px;
+  font-family: inherit;
+  font-size: var(--fs-base);
+  color: var(--color-foreground);
+  background: #fff;
+  border: var(--border);
+  border-radius: var(--radius);
+  transition: box-shadow var(--t-fast);
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  box-shadow: var(--shadow);            /* 焦点用硬阴影而不是变色边框 */
+}
+input::placeholder { color: #9a9a9a; }
+
+/* 金额输入用等宽 */
+input[inputmode='decimal'], .field--amount input {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.row {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.row > * { flex: 1 1 150px; }
+.row > button { flex: 0 0 auto; }
+
+/* ==========================================================================
+   表格
+   ========================================================================== */
+
+.table-wrap {
+  /* 账目表列多，窄屏必然溢出。按 Brutalism"结构外显"的思路保留硬边框并横向滚动，
+     不做响应式折叠 —— 折叠会把账本的结构藏起来。 */
+  overflow-x: auto;
+  border-top: var(--border-width-thin) solid var(--color-border);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-base);
+}
+
+th, td {
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+  border-bottom: var(--border-width-thin) solid var(--color-border);
+}
+
+th {
+  background: var(--color-muted);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+td.num, th.num { text-align: right; }
+
+tbody tr:hover { background: var(--color-primary); }   /* 悬停整行黄底，一眼看清 */
+tbody tr:last-child td { border-bottom: none; }
+
+/* ==========================================================================
+   标签
+   ========================================================================== */
+
+.tag {
+  display: inline-block;
+  padding: 1px var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--color-foreground);
+}
+
+/* 借 / 贷 —— 全站对比度最高的两个标签，扫一眼表格就能分辨 */
+.tag--debit {
+  background: var(--color-foreground);
+  color: #fff;
+}
+.tag--credit {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.tag--posted {
+  background: var(--color-success);
+  color: var(--color-on-success);
+}
+.tag--reversed {
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+  text-decoration: line-through;
+}
+.tag--partial {
+  background: var(--c-yellow);
+  color: var(--color-on-primary);
+}
+.tag--reversal {
+  background: var(--color-muted);
+  color: var(--color-foreground);
+}
+.tag--expense  { background: var(--color-danger); color: var(--color-on-danger); }
+.tag--income   { background: var(--color-success); color: var(--color-on-success); }
+.tag--transfer { background: var(--color-secondary); color: var(--color-on-secondary); }
+.tag--opening  { background: var(--color-foreground); color: #fff; }
+
+/* ==========================================================================
+   天平式分录预览  —— 全站唯一"讲故事"的组件
+   ==========================================================================
+
+   把"借 费用 / 贷 资产"渲染成左右等宽、中间硬竖线的对照块：
+     * 平衡时整块黄底
+     * 不平衡时整块红底白字
+   复式记账的核心机制因此变成一眼可见的界面元素，而不是一行小字说明。
+   ========================================================================== */
+
+.scale {
+  border: var(--border);
+  box-shadow: var(--shadow);
+  margin-top: var(--sp-3);
+}
+
+.scale--balanced { background: var(--color-primary); }
+.scale--unbalanced { background: var(--color-danger); color: var(--color-on-danger); }
+
+.scale__head {
+  display: block;
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  border-bottom: var(--border-thin);
+}
+
+.scale__cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.scale__col { padding: var(--sp-3) var(--sp-4); }
+/* 中间的分隔竖线：天平的中轴 */
+.scale__col + .scale__col { border-left: var(--border); }
+
+.scale__side {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+}
+
+.scale__subject {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  margin-top: var(--sp-1);
+  word-break: break-all;
+}
+
+.scale__amount {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  text-align: right;
+  margin-top: var(--sp-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.scale__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border-top: var(--border-thin);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.scale__verdict { white-space: nowrap; }
+
+/* ==========================================================================
+   提示
+   ========================================================================== */
+
+.alert {
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--sp-3);
+  font-weight: 500;
+}
+.alert--error { background: var(--color-danger); color: var(--color-on-danger); font-weight: 700; }
+.alert--ok    { background: var(--color-success); color: var(--color-on-success); }
+.alert--info  { background: #fff; }
+
+/* 顶部整条横幅式通知（替代原来的右上角小提示） */
+.toast {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: var(--border);
+  font-weight: 700;
+  text-align: center;
+  animation: toast-in var(--t-base) ease-out;
+}
+.toast--ok    { background: var(--color-success); color: var(--color-on-success); }
+.toast--error { background: var(--color-danger); color: var(--color-on-danger); }
+.toast--info  { background: var(--color-primary); color: var(--color-on-primary); }
+
+@keyframes toast-in {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(0); }
+}
+
+/* ==========================================================================
+   杂项
+   ========================================================================== */
+
+.empty {
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+  color: var(--color-muted-foreground);
+}
+
+.muted { color: var(--color-muted-foreground); }
+.right { text-align: right; }
+.mt-3 { margin-top: var(--sp-3); }
+.mt-4 { margin-top: var(--sp-4); }
+.mb-0 { margin-bottom: 0; }
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+}
+.pager__info { flex: 1; font-size: var(--fs-sm); color: var(--color-muted-foreground); }
+
+/* ==========================================================================
+   登录 / 注册
+   ========================================================================== */
+
+.auth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--sp-5);
+}
+
+.auth__box {
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border: var(--border);
+  box-shadow: 8px 8px 0 var(--shadow-color);
+  padding: var(--sp-6);
+}
+
+.auth__title { font-size: var(--fs-xl); margin-bottom: var(--sp-1); }
+.auth__sub {
+  font-size: var(--fs-sm);
+  color: var(--color-muted-foreground);
+  margin-bottom: var(--sp-5);
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--border-thin);
+}
+.auth__switch {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--border-thin);
+  text-align: center;
+  font-size: var(--fs-sm);
+}
+.auth__switch a { font-weight: 700; cursor: pointer; }
+
+/* ==========================================================================
+   技能 Accessibility 要求：尊重 prefers-reduced-motion
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  button:hover:not(:disabled) { transform: none; box-shadow: var(--shadow); }
+}
+
+/* ==========================================================================
+   窄屏：账目表横向滚动，其余保持纵向堆叠
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .layout { flex-direction: column; }
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: var(--border);
+    padding: var(--sp-3) 0;
+  }
+  .sidebar__who { display: none; }
+  .main { padding: var(--sp-4) var(--sp-3); }
+  .stat__value { font-size: var(--fs-xl); }
+}
