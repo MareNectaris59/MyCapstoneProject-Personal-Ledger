@@ -6,13 +6,17 @@
 
 | 部分 | 状态 |
 | --- | --- |
-| 设计文档 | ✅ [系统设计说明书](docs/系统设计说明书.md) · [数据库设计](docs/数据库设计.md) · [Brutalism 改造说明书](docs/前端Brutalism改造说明书.md) · [数据库备份说明](docs/数据库备份说明.md) |
+| 设计文档 | ✅ [系统设计说明书](docs/系统设计说明书.md) · [数据库设计](docs/数据库设计.md) · [前端Brutalism改造说明书](docs/前端Brutalism改造说明书.md) · [前端改版方案](docs/前端改版方案.md) · [数据库备份说明](docs/数据库备份说明.md) · [环境搭建与部署](docs/环境搭建与部署.md) |
 | 数据库 | ✅ 11 张表，Flyway 迁移至 v2（`V1__baseline.sql` + `V2__add_user_deleted_at.sql`） |
-| 后端 | ✅ 记账 / 冲正 / 借贷平衡 / 余额一致性 / 幂等 / 账号注销，**69 项验收测试全通过** |
-| 前端 | ✅ Vite + Vue 3 单文件组件，Brutalism 风格，6 个页面 |
+| 后端 | ✅ 记账 / 撤销 / 借贷平衡 / 余额一致性 / 幂等 / 账号注销 / 科目增删改，**69 项验收测试全通过** |
+| 前端 | ✅ Vite + Vue 3 单文件组件，**轻量 Claymorphism** 风格，4 个页面（总览 / 记一笔 / 账目 / 账号设置） |
 | 预算模块 | ⬜ 未实现（表与实体已就绪，算法口径已设计） |
 | 消费分析图表 | ⬜ 未实现（依赖后端 `/api/v1/analysis/**` 接口） |
 | 部署（Nginx/HTTPS） | ⬜ 未实现 |
+
+> 前端已于 2026-10 由 Brutalism 改为 Claymorphism，并做了一轮精简：
+> 删除「分类与账户」独立页（账户管理并入总览、分类管理并入记账表单），
+> 导航从 5 项降到 4 项。决策依据见 [前端改版方案](docs/前端改版方案.md)。
 
 ## 环境要求
 
@@ -124,12 +128,18 @@ npm run build
 
 ```powershell
 Set-Location -LiteralPath '<项目>\backend'
-powershell -ExecutionPolicy Bypass -File .\test-api.ps1
-powershell -ExecutionPolicy Bypass -File .\test-delete-account.ps1
+powershell -ExecutionPolicy Bypass -File .\test-api.ps1              # 69 项验收
+powershell -ExecutionPolicy Bypass -File .\test-delete-account.ps1   # 注销账号
+powershell -ExecutionPolicy Bypass -File .\test-subject-api.ps1      # 科目增删改 + 编码生成
 ```
 
-覆盖设计文档的 AC-01 ～ AC-06 以及非叶子科目、同账户转账、重复撤销等守卫，
-**69 项全通过**才算绿色。
+`test-api.ps1` 覆盖设计文档的 AC-01 ～ AC-06 以及非叶子科目、同账户转账、重复撤销等守卫，
+**69 项全通过**才算绿色。另两个脚本覆盖新增的账号注销与科目管理接口。
+
+> 新增科目时的编码由 `SubjectService.nextCode` 自动生成，规则与预置模板一致：
+> 根编码是展示段（`1`/`5`），子科目为 `根编码 + 分组段 + 2 位序号`（`100106`）。
+> 该逻辑曾连续出过三个 bug（长度公式、基数少一位、软删除行占位），
+> 排查经过与原因写在 `docs/数据库设计.md` 的科目编码小节，改动前务必先读。
 
 ## 拷到 U 盘 / 换电脑
 
@@ -160,6 +170,7 @@ powershell -ExecutionPolicy Bypass -File .\test-delete-account.ps1
 │   ├── settings.xml                ★ IDEA 与命令行共用的 Maven 配置
 │   ├── test-api.ps1                69 项端到端验收测试
 │   ├── test-delete-account.ps1     账号注销流程测试
+│   ├── test-subject-api.ps1        科目增删改与编码生成测试
 │   └── src/main/
 │       ├── java/com/example/ledger/
 │       │   ├── common/             统一响应体、错误码、异常处理、金额工具、配置

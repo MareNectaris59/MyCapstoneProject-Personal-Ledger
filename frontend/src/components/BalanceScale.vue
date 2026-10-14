@@ -1,12 +1,19 @@
 <script setup>
 /**
- * 支出 / 收入两侧对照预览。
+ * 借方 / 贷方两侧对照预览 —— 全站唯一"讲故事"的组件。
  *
- * 把「借 费用 / 贷 资产」呈现为左右等宽、中间硬线的对照块：
- * 金额相等时整块黄底，不等时整块红底。
+ * 复式记账的核心是「每笔业务至少两条分录，借方合计 = 贷方合计」。
+ * 这个组件把它变成一眼可见的界面元素：左右两张卡片，金额相等时两张卡
+ * 都带绿色柔光，不等时转红。
  *
- * 文案面向普通用户 —— 用「支出方 / 收入方」而不是「借方 / 贷方」。
- * 用户不懂会计术语，但能看懂"这笔钱从哪出、归到哪一类"。
+ * 视觉上从 Brutalism 的「3px 黑竖线 + 硬色底」改为 Claymorphism 的
+ * 「两张浮起的小卡片 + 中间留白」，但**设计意图不变** ——
+ * 用户每记一笔都能看见借贷如何配平。
+ *
+ * 文案面向普通用户：用「支出方 / 收入方」而不是「借方 / 贷方」。
+ *
+ * 注意：合计只用 parseFloat 做**判断**，展示仍走 formatMoney（字符串），
+ * 不把浮点结果回传给后端。
  */
 import { computed } from 'vue'
 import { formatMoney } from '@/utils/format'
@@ -59,7 +66,7 @@ const creditLine = computed(() => props.lines.find((l) => l.direction === 'CREDI
     </div>
 
     <div class="scale__foot">
-      <span>{{ formatMoney(totals.debit) }} ＝ {{ formatMoney(totals.credit) }}</span>
+      <span class="muted">{{ formatMoney(totals.debit) }} ＝ {{ formatMoney(totals.credit) }}</span>
       <span class="scale__verdict">{{ balanced ? '✓ 金额相等' : '✗ 金额不等' }}</span>
     </div>
   </div>

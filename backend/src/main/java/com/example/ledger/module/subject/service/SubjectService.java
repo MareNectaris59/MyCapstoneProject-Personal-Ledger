@@ -26,9 +26,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 科目服务：科目树查询、账户余额、期初建账。
@@ -278,22 +280,31 @@ public class SubjectService {
         subject.setEnabled(true);
         subject.setDeleted(0);
 
-        Long parent = parentId == null ? 0L : parentId;
-        if (parent == 0L) {
-            subject.setParentId(0L);
-            subject.setLevel(1);
-            subject.setSubjectCode(nextCode(userId, type, null));
+        // 新增科目若未指定父级，挂到该类型的根节点下（新增账户 → 挂在「资产」下）。
+        // 不能让它成为根的兄弟：那样它在科目树里会以一级节点身份出现，
+        // 编码也会脱离「根编码 + 4 位序号」的规则。
+        Subject typeRoot = findTypeRoot(userId, type);
+        if (typeRoot == null) {
+            throw BizException.of(ResultCode.PARAM_INVALID,
+                    "该类型的根科目不存在，无法新增科目");
+        }
+
+        Long parent = parentId == null ? typeRoot.getId() : parentId;
+        if (parent.equals(typeRoot.getId())) {
+            subject.setParentId(typeRoot.getId());
+            subject.setLevel(typeRoot.getLevel() + 1);
+            subject.setSubjectCode(nextCode(userId, type, typeRoot));
             subject.setIsLeaf(true);
             subject.setBudgetable(type.isExpense());
             subject.setPath("/");
             subjectMapper.insert(subject);
-            subject.setPath("/" + subject.getId() + "/");
+            subject.setPath(typeRoot.getPath() + subject.getId() + "/");
             subjectMapper.updateById(subject);
         } else {
             Subject p = requireOwned(userId, parent);
             subject.setParentId(p.getId());
             subject.setLevel(p.getLevel() + 1);
-            subject.setSubjectCode(nextCode(userId, type, p.getSubjectCode()));
+            subject.setSubjectCode(nextCode(userId, type, p));
             subject.setIsLeaf(true);
             subject.setBudgetable(type.isExpense());
             subject.setPath("/");
@@ -420,25 +431,123 @@ public class SubjectService {
     }
 
     /**
-     * 生成下一个科目编码：父编码 + 2 位序号，序号取同级最大值 + 1。
+     * 生成下一个科目编码。
+     *
+     * <p><b>编码结构</b>（与《数据库设计.md》§6 的预置模板一致）：
+     * <pre>
+     *   根（level 1）       "1" 资产、"5" 费用        1 位，纯展示段
+     *   level 2            100101 现金 ～ 100105 储蓄  6 位
+     *                      500101 餐饮 ～ 500109 其他
+     *   level 3            50010101 早餐              8 位 = 父编码 + 2 位
+     * </pre>
+     *
+     * <p><b>规则：末 2 位是序号，前面所有位是分组段（prefix）。</b>
+     *
+     * <p><b>本方法的历史坑（务必不要再犯）</b>：根编码只有 1 位，子科目是 6 位，
+     * 两者长度<b>不成固定关系</b>。早先几版都试图用长度公式推导，全部失败：
+     * <ul>
+     *   <li>{@code rootCode.length() + 4} = 5，而真实子科目是 6 位 →
+     *       所有候选都被长度判断排除，prefix 取不到，回落到 "0100"，
+     *       产出 {@code "1"+"0100"+"01" = 10101}</li>
+     *   <li>{@code Integer.parseInt(rootCode + "0100")} = 10100（少一位），
+     *       而正确基数是 100100</li>
+     *   <li>取"第一个遇到的"而非最小分组段 → 被历史脏数据带偏</li>
+     * </ul>
+     * 结论：<b>不要计算长度，用"末 2 位是序号"这一条结构规则。</b>
      */
-    private String nextCode(Long userId, SubjectType type, String parentCode) {
-        String prefix = parentCode == null ? type.getCodePrefix() + "00" : parentCode;
-        List<Subject> siblings = subjectMapper.selectList(new LambdaQueryWrapper<Subject>()
-                .eq(Subject::getUserId, userId)
-                .likeRight(Subject::getSubjectCode, prefix));
-        int max = 0;
-        for (Subject s : siblings) {
-            String code = s.getSubjectCode();
-            if (code == null || !code.startsWith(prefix)) {
-                continue;
-            }
-            String tail = code.substring(prefix.length());
-            if (tail.length() == 2 && tail.chars().allMatch(Character::isDigit)) {
-                max = Math.max(max, Integer.parseInt(tail));
+    private String nextCode(Long userId, SubjectType type, Subject parent) {
+        String parentCode = parent.getSubjectCode();
+        if (parentCode == null || parentCode.isEmpty()) {
+            throw BizException.of(ResultCode.PARAM_INVALID,
+                    "父科目的编码为空，无法自动生成子科目编码");
+        }
+
+        // 已占用编码集合。
+        //
+        // **必须包含已逻辑删除的行。** subject 上的唯一索引 uk_user_code
+        // (user_id, subject_code) 不区分 deleted，逻辑删除后编码仍占用索引位。
+        // 若只统计未删除的行，就会算出与已删除行重复的编码，插入时撞唯一索引，
+        // 用户看到"系统开小差"。
+        // 实测场景：新建账户 → 删除该账户 → 再新建账户，第二次必然失败。
+        // 因此这里用显式 SQL 绕过 @TableLogic 的自动过滤。
+        Set<String> taken = new HashSet<>();
+        for (String code : subjectMapper.selectAllCodesIncludingDeleted(userId, type)) {
+            if (code != null) {
+                taken.add(code);
             }
         }
-        return prefix + String.format("%02d", max + 1);
+
+        String prefix;
+        if (parent.getLevel() != null && parent.getLevel() == 1) {
+            // level 2：prefix = 某个既有同级子科目前缀（去掉末 2 位）；
+            // 一个都没有时用根编码 + "0100"，即首个编码为 <root>0100 01。
+            prefix = null;
+            for (String code : subjectMapper.selectChildCodesIncludingDeleted(userId, parent.getId())) {
+                if (code != null && code.length() > 2) {
+                    String head = code.substring(0, code.length() - 2);
+                    // 取最小前缀，避开脏数据（如孤儿 1010001 的前缀 1010）
+                    if (prefix == null || head.compareTo(prefix) < 0) {
+                        prefix = head;
+                    }
+                }
+            }
+            if (prefix == null) {
+                prefix = parentCode + "0100";
+            }
+        } else {
+            // level 3+：prefix 就是父编码
+            prefix = parentCode;
+        }
+
+        // 求同前缀兄弟里的最大序号
+        int max = 0;
+        for (String code : taken) {
+            if (code.length() != prefix.length() + 2 || !code.startsWith(prefix)) {
+                continue;
+            }
+            String seq = code.substring(prefix.length());
+            if (isAllDigits(seq)) {
+                max = Math.max(max, Integer.parseInt(seq));
+            }
+        }
+
+        // 逐位向后找空位。序号溢出 2 位时，把末 2 位并进前缀继续进位，
+        // 编码始终是连续十进制数，不会与既有值重复。
+        String candidate = prefix + String.format("%02d", max + 1);
+        int guard = 0;
+        while (taken.contains(candidate) && guard++ < 1000) {
+            max++;
+            candidate = String.valueOf(Long.parseLong(prefix) * 100 + (max + 1));
+        }
+
+        log.debug("生成科目编码 type={} parent={} level={} prefix={} -> {}",
+                type, parentCode, parent.getLevel(), prefix, candidate);
+        return candidate;
+    }
+
+    /**
+     * 取得某类型的根科目（{@code parent_id = 0} 且 {@code level = 1}）。
+     *
+     * <p>新增科目若未指定 {@code parentId}，必须挂到根下面；否则它会成为根的
+     * <b>兄弟</b>而不是子科目 —— 在科目树里以一级节点身份出现，
+     * 编码也会脱离 {@code 根编码 + 分组段 + 序号} 的规则。
+     */
+    private Subject findTypeRoot(Long userId, SubjectType type) {
+        return subjectMapper.selectOne(new LambdaQueryWrapper<Subject>()
+                .eq(Subject::getUserId, userId)
+                .eq(Subject::getSubjectType, type)
+                .eq(Subject::getParentId, 0L)
+                .eq(Subject::getLevel, 1)
+                .last("LIMIT 1"));
+    }
+
+    private static boolean isAllDigits(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (!Character.isDigit(s.charAt(i))) {
+                return false;
+            }
+        }
+        return !s.isEmpty();
     }
 
     /** 科目类型的字符串名，null 安全。 */
