@@ -67,7 +67,16 @@ public enum ResultCode {
     INTERNAL_ERROR(1901, "系统开小差了，请稍后重试"),
     DB_ERROR(1902, "数据操作失败"),
     CACHE_ERROR(1903, "缓存服务异常"),
-    MAIL_SEND_FAILED(1904, "邮件发送失败");
+    MAIL_SEND_FAILED(1904, "邮件发送失败"),
+
+    /**
+     * 请求的路径不存在（HTTP 404）。
+     *
+     * <p>归在"系统"段而不是"参数校验"段：这不是参数值不合法，而是路径没有
+     * 匹配到任何接口（例如 {@code /api/v1/ledgers/abc}，id 位置不是数字）。
+     * 客户端拿到这个码应当改 URL，而不是改参数。
+     */
+    NOT_FOUND(1905, "请求的路径不存在");
 
     private final int code;
     private final String message;

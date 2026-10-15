@@ -1,0 +1,30 @@
+-- ============================================================
+-- V3：移除 ledger.uk_reversal_once
+--
+-- 背景：
+--   V1 基线里 ledger 上有 UNIQUE KEY uk_reversal_once (reversal_of_id, ledger_type)，
+--   本意是"一张单据只能被冲正一次"，用唯一索引兜底并发重复冲正。
+--
+--   但这个索引与设计文档自己定义的状态机冲突：
+--     §7.4 状态机写的是
+--       POSTED             -> PARTIALLY_REVERSED : 部分冲正
+--       PARTIALLY_REVERSED -> PARTIALLY_REVERSED : 再次部分冲正   <-- 明确允许多次
+--     而索引对 ledger_type='REVERSAL' 一律只允许一行，
+--     于是"部分冲正 33.33 后再冲正剩余 66.67"会被数据库拒绝：
+--       Duplicate entry '<id>-REVERSAL' for key 'ledger.uk_reversal_once'
+--     对外表现为 500（兜底异常处理器），调用方看到的是"系统开小差"，
+--     完全无法从提示判断真实原因。AC-05 验收标准（部分冲正）因此无法通过。
+--
+--   为什么移除是安全的：
+--     并发重复冲正已由服务层两道防线拦截，不依赖这个索引：
+--       1. LedgerCoreService.reverse 用 selectForUpdate 对原凭证加行锁，
+--          同一凭证的并发冲正请求被串行化（§7.4.3）
+--       2. 行锁内先检查 isReversible()（已全额冲正 -> LEDGER_ALREADY_REVERSED），
+--          再校验冲正金额不超过 reversibleAmount()（超出 -> REVERSAL_AMOUNT_EXCEEDED）
+--     即"重复全额冲正被拒"由状态判断保证，"多次部分冲正"则被正确放行。
+--
+--   注意：本迁移只删索引，不动数据。已存在的冲正记录不受影响。
+--   数据库设计文档 §4 的索引清单与实际建表语句需同步更新（已修改 docs/数据库设计.md）。
+-- ============================================================
+
+ALTER TABLE `ledger` DROP INDEX `uk_reversal_once`;

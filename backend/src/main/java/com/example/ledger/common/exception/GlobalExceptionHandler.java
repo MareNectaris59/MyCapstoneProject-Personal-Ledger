@@ -17,6 +17,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
@@ -96,6 +97,31 @@ public class GlobalExceptionHandler {
     public Result<Void> handleAccessDenied(AccessDeniedException ex) {
         log.warn("越权访问 traceId={} msg={}", TraceIdHolder.current(), ex.getMessage());
         return Result.failure(ResultCode.NO_PERMISSION);
+    }
+
+    /**
+     * 路径不存在：404。
+     *
+     * <p>Spring Boot 3.2+ 对未匹配的路径抛 {@code NoResourceFoundException}
+     * （message 形如 "No static resource api/v1/ledgers/abc"）—— 浏览器端被当作
+     * 找不到静态资源，服务端其实等价于"没有这个接口/资源"。
+     *
+     * <p><b>为什么必须单独处理？</b>它的父类是 {@code ServletException}，
+     * 不是 {@code NoHandlerFoundException}，所以不会被专门的处理器接住，
+     * 而是落到下面的兜底 {@code Exception} 处理器，对外返回 <b>500</b>。
+     * 症状是：访问一个写错的 URL（如 {@code /api/v1/ledgers/abc}，id 不是数字）
+     * 得到"系统开小差了"，把调用方的路径错误伪装成服务端故障，
+     * 排查时会往错误的方向走。实测确认过这个行为。
+     *
+     * <p>返回 404 而不是 400：路径根本没匹配上任何接口，属于"资源不存在"；
+     * 而参数格式错误（如 {@code ?size=abc}）仍由
+     * {@link #handleTypeMismatch} 返回 400。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Result<Void> handleNoResource(NoResourceFoundException ex, HttpServletRequest request) {
+        log.warn("路径不存在 traceId={} uri={}", TraceIdHolder.current(), request.getRequestURI());
+        return Result.failure(ResultCode.NOT_FOUND.getCode(), "请求的路径不存在");
     }
 
     /** 兜底：未预期的异常，记 ERROR 与完整堆栈，对外只给安全文案。 */

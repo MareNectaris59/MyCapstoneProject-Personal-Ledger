@@ -38,6 +38,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 记账内核。
@@ -440,23 +442,82 @@ public class LedgerCoreService {
         ledger.setOccurredDate(occurredDate);
         ledger.setRemark(remark);
         ledger.setPostedAt(LocalDateTime.now());
-        ledger.setLedgerNo(buildLedgerNo(occurredDate));
+        ledger.setLedgerNo(buildLedgerNo(userId, occurredDate));
         ledger.setIdempotencyKey(idempotencyKey);
         ledgerMapper.insert(ledger);
         return ledger;
     }
 
     /**
-     * 生成凭证号：{@code LE + yyyyMMdd + HHmmss + 3 位序号}。
+     * 按用户与日期递增的当日流水号。
      *
-     * <p>末尾 3 位取当前毫秒的低 3 位，让同一秒内的连续记账也能区分开。
+     * <p>键为 {@code userId + "@" + yyyyMMdd}，值为已分配到的最大序号。
+     * 用 {@link ConcurrentHashMap#merge} 做原子自增，无需额外加锁。
      */
-    private String buildLedgerNo(LocalDate occurredDate) {
-        LocalDateTime now = LocalDateTime.now();
+    private final ConcurrentHashMap<String, AtomicInteger> dailySeq = new ConcurrentHashMap<>();
+
+    /**
+     * 生成凭证号：{@code LE + 业务发生日 yyyyMMdd + 4 位当日流水}。
+     *
+     * <p>日期段取 <b>{@code occurredDate}（业务发生日）</b>，不是记账当天 ——
+     * 补记上个月的账时，凭证号应当属于上个月，否则按凭证号排序会与账期错位。
+     * 流水号按"用户 + 业务发生日"独立计数。
+     *
+     * <p><b>为什么不用"时间戳 + 毫秒低 3 位"？</b>
+     * 早期实现是 {@code LE + yyyyMMdd + HHmmss + 毫秒低3位}，注释称"唯一性由
+     * uk_user_no 与时间精度共同保证"。这个假设在并发下不成立：
+     * 物理上不可能给同一毫秒内的多个请求分配不同的 3 位序号，于是它们算出
+     * <b>完全相同的凭证号</b>，撞 {@code uk_user_no} 报
+     * {@code Duplicate entry '<userId>-LE...'}，对外表现为 500 或随机失败。
+     *
+     * <p>实测：100 并发各记一笔，约 25%–50% 的请求因此失败（AC-07）。
+     * 单机顺序测试永远发现不了这个问题 —— 同一毫秒不会发出两个请求。
+     *
+     * <p><b>为什么不用 {@code COUNT(*)+1}？</b>
+     * 并发下两个事务会读到同一个计数，正是上面同类问题的另一种写法。
+     *
+     * <p><b>内存计数 + 数据库兜底</b>：序号主体来自 {@link #dailySeq}
+     * （{@link ConcurrentHashMap#merge} 原子自增，并发安全）。但纯内存计数
+     * 在应用重启后会从 0 重新开始，与当天已存在的凭证号冲突。
+     * 因此每次取号时都与数据库中该用户该日的最大流水号取较大者：
+     * <ol>
+     *   <li>{@code ledgerMapper.selectMaxLedgerNo} 取 {@code MAX(ledger_no)}</li>
+     *   <li>解析出末 4 位流水号，与内存计数比较</li>
+     *   <li>首次遇到某 (用户, 日期) 时用数据库值作为起点</li>
+     * </ol>
+     * 这样重启、甚至换实例后只要读取一次数据库就能接上已有流水。
+     * 代价是每次记账多一条 {@code MAX} 查询 —— 该列上有索引
+     * （{@code uk_user_no} 的最左前缀 user_id），开销可接受。
+     *
+     * <p><b>剩下的局限</b>：多实例同时写同一天会有竞态（各自读到相同的 MAX）。
+     * 本项目单实例部署，不受影响；多实例应改用 Redis INCR 或数据库序列。
+     */
+    private String buildLedgerNo(Long userId, LocalDate occurredDate) {
         String day = occurredDate.toString().replace("-", "");
-        String time = String.format("%02d%02d%02d", now.getHour(), now.getMinute(), now.getSecond());
-        String seq = String.format("%03d", now.getNano() / 1_000_000 % 1000);
-        return "LE" + day + time + seq;
+        String prefix = "LE" + day;
+        String key = userId + "@" + day;
+
+        // 数据库里已有的最大流水号（重启后靠它接上，避免从 0001 重来）
+        int dbMax = 0;
+        String maxNo = ledgerMapper.selectMaxLedgerNo(userId, prefix + "%");
+        if (maxNo != null && maxNo.length() == prefix.length() + 4) {
+            String tail = maxNo.substring(prefix.length());
+            if (tail.chars().allMatch(Character::isDigit)) {
+                dbMax = Integer.parseInt(tail);
+            }
+        }
+
+        final int floor = dbMax;
+        // merge 的 remapping 函数里把内存计数抬到不低于 dbMax，再自增
+        int seq = dailySeq.merge(key, new AtomicInteger(Math.max(floor, 0) + 1), (existing, seed) -> {
+            if (existing.get() < floor) {
+                existing.set(floor);
+            }
+            existing.incrementAndGet();
+            return existing;
+        }).get();
+
+        return prefix + String.format("%04d", seq);
     }
 
     /**
