@@ -10,9 +10,7 @@ import com.example.ledger.common.constant.SubjectType;
 import com.example.ledger.common.exception.BizException;
 import com.example.ledger.common.result.ResultCode;
 import com.example.ledger.common.util.MoneyUtil;
-import com.example.ledger.module.budget.entity.Budget;
-import com.example.ledger.module.budget.mapper.BudgetMapper;
-import com.example.ledger.module.budget.mapper.BudgetPeriodMapper;
+import com.example.ledger.module.budget.service.BudgetDirtyMarker;
 import com.example.ledger.module.ledger.dto.LedgerDetail;
 import com.example.ledger.module.ledger.dto.LedgerRequests;
 import com.example.ledger.module.ledger.entity.Entry;
@@ -68,23 +66,20 @@ public class LedgerCoreService {
     private final EntryMapper entryMapper;
     private final SubjectMapper subjectMapper;
     private final AccountMetaMapper accountMetaMapper;
-    private final BudgetMapper budgetMapper;
-    private final BudgetPeriodMapper budgetPeriodMapper;
+    private final BudgetDirtyMarker budgetDirtyMarker;
     private final BalanceValidator balanceValidator;
 
     public LedgerCoreService(LedgerMapper ledgerMapper,
                              EntryMapper entryMapper,
                              SubjectMapper subjectMapper,
                              AccountMetaMapper accountMetaMapper,
-                             BudgetMapper budgetMapper,
-                             BudgetPeriodMapper budgetPeriodMapper,
+                             BudgetDirtyMarker budgetDirtyMarker,
                              BalanceValidator balanceValidator) {
         this.ledgerMapper = ledgerMapper;
         this.entryMapper = entryMapper;
         this.subjectMapper = subjectMapper;
         this.accountMetaMapper = accountMetaMapper;
-        this.budgetMapper = budgetMapper;
-        this.budgetPeriodMapper = budgetPeriodMapper;
+        this.budgetDirtyMarker = budgetDirtyMarker;
         this.balanceValidator = balanceValidator;
     }
 
@@ -551,26 +546,18 @@ public class LedgerCoreService {
     }
 
     /**
-     * 把受影响的预算周期标记为"待重算"。
+     * 把受影响的预算周期标为待重算。
      *
      * <p><b>只置脏标记，不做增量扣减。</b>增量累加一旦某次失败或重复执行
      * 就会永久漂移且无法自愈；由 {@code entry} 重算则永远正确
      * （《系统设计说明书》§7.5.4）。
      *
-     * <p>定时结算任务（本骨架中为 {@code BudgetSettlementJob}）负责扫描
-     * {@code dirty_since} 非空的周期并按 §7.5.4 的 5 步级联重算。
+     * <p>规则本身属于预算模块（"哪些预算受影响"），因此实现在
+     * {@link BudgetDirtyMarker} 里。这样账务不必知道预算的范围口径，
+     * 依赖方向也不成环（账务 → 预算置脏器，预算服务 → 账务数据由 SQL 直读）。
      */
     private void markBudgetsDirty(Long userId, LocalDate occurredDate) {
-        List<Budget> budgets = budgetMapper.selectList(new LambdaQueryWrapper<Budget>()
-                .eq(Budget::getUserId, userId)
-                .eq(Budget::getEnabled, true)
-                .le(Budget::getStartDate, occurredDate));
-        for (Budget b : budgets) {
-            if (b.getEndDate() != null && b.getEndDate().isBefore(occurredDate)) {
-                continue;
-            }
-            budgetPeriodMapper.markDirty(b.getId(), occurredDate);
-        }
+        budgetDirtyMarker.markDirty(userId, occurredDate);
     }
 
     private Map<Long, Subject> subjectIndex(Long userId, List<Entry> entries) {
