@@ -59,7 +59,9 @@ async function onLogout() {
     </nav>
 
     <main class="main">
-      <RouterView />
+      <div class="main__inner">
+        <RouterView />
+      </div>
     </main>
   </div>
 </template>

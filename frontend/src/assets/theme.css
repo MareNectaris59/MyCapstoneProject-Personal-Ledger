@@ -156,9 +156,25 @@ a { color: var(--primary); }
 
 /* ==========================================================================
    布局
+   ==========================================================================
+
+   目标（参考 DeepSeek 控制台）：侧边栏固定不动，只有右侧内容区可以上下滚动。
+
+   实现用 position: sticky 而不是 fixed：
+     - fixed 会让侧边栏脱离文档流，必须给 .main 手工补左内边距，
+       宽度一改就要同步改两处，容易漂移
+     - sticky 仍在 flex 流里，宽度由 flex 自动分配，无需补任何偏移量
+     - sticky 不脱离文档流，打印和浏览器缩放时行为更稳
+
+   .layout 设 height + overflow: hidden 把滚动限制在 .main 内部；
+   若只依赖 min-height，页面仍会整体滚动，sticky 就失去意义。
    ========================================================================== */
 
-.layout { display: flex; min-height: 100vh; }
+.layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
 
 .sidebar {
   width: 200px;
@@ -167,6 +183,11 @@ a { color: var(--primary); }
   padding: var(--sp-5) var(--sp-3);
   display: flex;
   flex-direction: column;
+  /* 固定高度并自身可滚 —— 窄屏或导航项变多时，底部"退出登录"仍可触达 */
+  height: 100vh;
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
 }
 
 .sidebar__brand {
@@ -174,6 +195,7 @@ a { color: var(--primary); }
   font-weight: 700;
   color: var(--primary);
   padding: 0 var(--sp-3) var(--sp-5);
+  flex-shrink: 0;
 }
 
 .sidebar__link {
@@ -209,6 +231,15 @@ a { color: var(--primary); }
 .main {
   flex: 1;
   min-width: 0;
+  overflow-y: auto;
+  /* 滚动条紧贴内容右缘，不要压在宽度约束的空档里 */
+  overscroll-behavior: contain;
+}
+
+/* 宽度约束放在内层而不是滚动容器上：
+   若给 .main 设 max-width，超出部分会露出没有背景与内边距的空档；
+   由内层承担 padding 与 max-width，窄屏与宽屏都不会出现断层。 */
+.main__inner {
   padding: var(--sp-5);
   max-width: 1120px;
 }
@@ -680,19 +711,25 @@ tbody tr:hover {
    ========================================================================== */
 
 @media (max-width: 768px) {
-  .layout { flex-direction: column; }
+  /* 窄屏下侧边栏变成顶部横向导航条，此时改回整页滚动：
+     固定一个横向条会占掉本就不多的高度，体验反而更差。 */
+  .layout { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
   .sidebar {
+    position: static;
     width: 100%;
+    height: auto;
     flex-direction: row;
     align-items: center;
     gap: var(--sp-1);
     padding: var(--sp-3);
     overflow-x: auto;
+    overflow-y: hidden;
   }
   .sidebar__brand { padding: 0 var(--sp-3) 0 0; white-space: nowrap; }
   .sidebar__link { margin-bottom: 0; white-space: nowrap; }
   .sidebar__who { display: none; }
-  .main { padding: var(--sp-4) var(--sp-3); }
+  .main { overflow: visible; }
+  .main__inner { padding: var(--sp-4) var(--sp-3); }
   .stat__value { font-size: var(--fs-xl); }
   .scale__cols { grid-template-columns: 1fr; }
   .toast { left: var(--sp-4); right: var(--sp-4); max-width: none; }
