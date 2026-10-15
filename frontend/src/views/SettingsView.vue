@@ -102,11 +102,7 @@ async function doDelete() {
 
   <div class="danger-zone">
     <h3>注销账号</h3>
-    <p>注销会删除你的账号，<b>这不是退出登录</b>。</p>
-    <p class="muted" style="font-size: 13px">
-      账号立即失效且无法找回，昵称、头像、邮箱等个人信息会被清除。<br />
-      你的账务记录会被保留但无法再访问。
-    </p>
+    <p>注销会删除你的账号，注销后原账号将无法再次登录，相关记账数据也将无法找回。</p>
 
     <button v-if="!expanded" class="btn--danger" style="margin-top: 12px" @click="expanded = true">
       我要注销账号

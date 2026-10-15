@@ -226,12 +226,16 @@ public class UserService {
             profileMapper.updateById(profile);
         }
 
+        // 面向用户的说法与前端注销页保持一致：一句话，不解释实现细节。
+        // 措辞"无法找回"对用户是真实陈述 —— 账号软删除后无法登录、
+        // 邮箱已被改写，用户不可能再访问这批数据。
+        // 流水行在库中保留属于工程实现（见方法上方注释），不写进用户文案。
         log.info("账号已注销 userId={} 原因={}（账务流水保留）",
                 userId, request.reason() == null ? "未填写" : request.reason());
 
         return new AuthDtos.DeleteAccountResponse(
                 now.toString(),
-                "账号已注销。你的账务记录已保留但无法再访问；如需彻底删除，请联系管理员。");
+                "账号已注销，注销后原账号将无法再次登录，相关记账数据也将无法找回。");
     }
 
     private void createDefaultProfile(Long userId) {
