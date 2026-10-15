@@ -35,6 +35,12 @@ const routes = [
     meta: { title: '账目' }
   },
   {
+    path: '/budgets',
+    name: 'budgets',
+    component: () => import('@/views/BudgetView.vue'),
+    meta: { title: '预算' }
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('@/views/SettingsView.vue'),

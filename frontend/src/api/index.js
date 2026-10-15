@@ -116,7 +116,53 @@ export const api = {
   ledgers: (params) => http.get('/ledgers', { params }),
   ledgerDetail: (id) => http.get(`/ledgers/${id}`),
   reverse: (id, payload) => http.post(`/ledgers/${id}/reverse`, payload),
-  balanceCheck: () => http.get('/ledgers/balance-check')
+  balanceCheck: () => http.get('/ledgers/balance-check'),
+
+  // ---- 预算 ----
+  /**
+   * 预算列表。每项都带 period —— 即"今天落在哪个周期"的执行情况，
+   * 因此列表页无需再逐个请求详情就能渲染进度。
+   */
+  budgets: () => http.get('/budgets'),
+
+  /**
+   * 新建预算。
+   *
+   * 只传业务字段；周期行（budget_period）由后端按 startDate 起连续生成，
+   * 前端不参与周期切分 —— 周起始日、跨年周归属这些规则都在后端一处实现。
+   *
+   * @param payload { name, scopeType: 'TOTAL'|'SUBJECT', subjectId?,
+   *                  periodType: 'WEEK'|'MONTH'|'CUSTOM', periodValue?,
+   *                  startDate, endDate?, amount,
+   *                  rolloverMode?: 'NONE'|'SURPLUS_ONLY'|'FULL',
+   *                  alertThreshold? }
+   */
+  createBudget: (payload) => http.post('/budgets', payload),
+
+  /** 预算详情（含全部周期，供趋势展示）。 */
+  budgetDetail: (id) => http.get(`/budgets/${id}`),
+
+  /** 该预算的周期列表。 */
+  budgetPeriods: (id) => http.get(`/budgets/${id}/periods`),
+
+  /** 当前周期执行情况 + 趋势 + 相关预警。 */
+  budgetExecution: (id) => http.get(`/budgets/${id}/execution`),
+
+  /**
+   * 修改预算。只允许改额度 / 阈值 / 结转模式 / 启用状态 / 名称。
+   * 周期结构（类型、起止日期、范围、科目）不可改 —— 改了会让已生成的周期行
+   * 与新窗口定义不一致，历史执行率随之失真。
+   */
+  updateBudget: (id, payload) => http.put(`/budgets/${id}`, payload),
+
+  /** 删除预算（保留历史周期行）。 */
+  deleteBudget: (id) => http.delete(`/budgets/${id}`),
+
+  /** 未读预警（跨预算）。 */
+  budgetAlerts: () => http.get('/budgets/alerts'),
+
+  /** 标记预警已读。 */
+  readBudgetAlert: (id) => http.put(`/budgets/alerts/${id}/read`)
 }
 
 export default http

@@ -567,6 +567,93 @@ tbody tr:hover {
 .scale--unbalanced .scale__verdict { color: var(--danger-text); }
 
 /* ==========================================================================
+   预算进度条
+   ==========================================================================
+
+   设计约束（来自后端 /budgets 的口径）：
+     - executionRate 可能为 null，表示"本期没有设额度"，不是 0%
+     - availableAmount 在超支时已被后端截断为 0，真实超支额在 overspent 字段
+     - 执行率可以超过 100%，此时进度条必须封顶但**数字照实显示**
+   ========================================================================== */
+
+.budget {
+  padding: var(--sp-4) var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+.budget:first-child { border-top: none; }
+
+.budget__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.budget__name { font-size: var(--fs-md); font-weight: 700; }
+.budget__meta { font-size: var(--fs-sm); color: var(--text-faint); }
+
+/* 进度条做成"内凹的黏土槽"，与浮起的卡片形成层次 */
+.bar {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-inset);
+  overflow: hidden;
+}
+.bar__fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  transition: width var(--t-base) var(--ease-bounce);
+}
+.bar__fill--warn   { background: #d97706; }
+.bar__fill--danger { background: var(--danger); }
+
+.budget__numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin-top: var(--sp-3);
+  font-size: var(--fs-sm);
+}
+.budget__numbers b {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.budget__numbers .over { color: var(--danger-text); font-weight: 700; }
+
+/* 期初结转单列一行，因为它是"上期省下的钱"，
+   与本期额度的来源不同，混在一起看会误解 */
+.budget__carry {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.budget__actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+
+/* 周期趋势：一行一根竖条，高度反映执行率，超过 100% 封顶但标红 */
+.trend { display: flex; align-items: flex-end; gap: 4px; height: 72px; margin-top: var(--sp-3); }
+.trend__col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.trend__bar {
+  width: 100%;
+  min-height: 3px;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  background: var(--accent);
+}
+.trend__bar--warn   { background: #d97706; }
+.trend__bar--danger { background: var(--danger); }
+.trend__bar--empty  { background: #cbd5e1; }
+.trend__label {
+  margin-top: 4px;
+  font-size: 9px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  transform: rotate(-45deg);
+  transform-origin: center;
+}
+
+/* ==========================================================================
    提示
    ========================================================================== */
 
