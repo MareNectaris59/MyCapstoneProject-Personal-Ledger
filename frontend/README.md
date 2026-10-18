@@ -64,17 +64,20 @@ src/
 ├── utils/
 │   └── format.js              金额/日期格式化、科目树压平、标签映射
 ├── assets/
-│   └── brutalism.css          ★ 设计令牌 + 全部组件样式
+│   └── theme.css             ★ 设计令牌 + 全部组件样式（Claymorphism 轻量灰蓝）
 ├── components/
-│   ├── AppToast.vue           顶部横幅通知
-│   ├── BalanceScale.vue       ★ 天平式借贷分录预览
-│   └── SubjectRow.vue         递归的科目树行
+│   ├── AppToast.vue          通知条
+│   └── BalanceScale.vue      ★ 天平式借贷分录预览
 └── views/
-    ├── LoginView.vue          登录 / 注册
-    ├── DashboardView.vue      总览：账户 + 对账自检 + 期初建账
-    ├── RecordView.vue         记一笔：支出 / 收入 / 转账
-    ├── LedgerView.vue         账目：分页 + 分录详情 + 冲正
-    └── SubjectView.vue        会计科目树
+    ├── LoginView.vue         登录 / 注册
+    ├── DashboardView.vue     总览：账户 + 期初建账 + 最近记录
+    ├── RecordView.vue        记一笔：支出 / 收入 / 转账，可就地新建分类
+    ├── LedgerView.vue        账目：组合筛选 + 排序 + 分录详情 + 冲正
+    ├── CategoryView.vue      支出分类：新建 / 改名 / 停用 / 删除
+    ├── BudgetView.vue        预算：额度、结转、执行率、预警
+    ├── AnalysisView.vue      消费分析：ECharts 四图 + CSV 导出
+    ├── SubjectDetailView.vue 科目明细：余额 + 逐笔变动
+    └── SettingsView.vue      账号设置：改昵称 / 改密码 / 注销账号
 ```
 
 ## 三个必须先理解的设计约定
@@ -114,37 +117,31 @@ history 模式下用户刷新 `/ledgers` 会直接 404。用 hash 模式（`#/le
 3. 或 Nginx 加 `try_files $uri $uri/ /index.html;`
 
 ## Element Plus 与 ECharts 的状态
+## Element Plus 与 ECharts 的状态
 
-两者依赖都已安装，但**源码里还没用**，这是有意为之：
+**Element Plus 已安装但源码里没用**，这是有意的：当前所有组件手写 CSS，
+样式集中在 `assets/theme.css` 一处，没必要为了几个控件引入一整套设计系统。
+若将来引入，应**覆盖其 CSS 变量**而不是逐个改组件。
 
-- **Element Plus**：Brutalism 需要完全控制边框（3px 实线）、阴影（`4px 4px 0`，无模糊）、
-  圆角（必须为 0）。这些恰好是组件库最难覆盖的部分。当前所有组件手写 CSS，
-  样式集中在 `assets/brutalism.css` 一处。若后续引入，应**覆盖其 CSS 变量**
-  而不是逐个改组件。
-- **ECharts**：消费分析图表需要后端 `/api/v1/analysis/**` 接口，
-  那组接口在设计文档 §6.2.6 已定义但尚未实现。接口就绪后再做图表。
+**ECharts 已在使用**：`views/AnalysisView.vue` 画了四个图（占比饼图、趋势折线、
+贡献度双向条形、同环比柱状）。按需引入（`echarts/core` + 3 种图表 + 4 个组件），
+并单独拆到 `echarts-*.js` 分包，只在 `/analysis` 路由懒加载时下载，
+不影响其它页面的首屏体积。
 
 ## 设计令牌来源
 
-`assets/brutalism.css` 的配色、边框、阴影、字体**全部来自 ui-ux-pro-max-skill 的实际检索输出**，
-不是凭经验写的。检索命令与技能返回原文见 `docs/前端Brutalism改造说明书.md` §0。
+`assets/theme.css` 的配色、圆角、阴影、字体来源与取舍，见
+[前端改版方案](../docs/前端改版方案.md) §2（含"两处刻意偏离技能规范"的理由）：
+技能默认配色是粉彩糖果色，定位偏"儿童应用"，与财务数据的可信感冲突，
+因此改用了同技能的 Personal Finance Tracker 色板并做了对比度修正。
 
-其中两处是刻意的**对比度修正**（技能要求 4.5:1，原始色板不满足）：
-
-| 项 | 技能原值 | 采用值 | 原因 |
-| --- | --- | --- | --- |
-| 蓝 | `#2196F3` | `#1F6FEB` | 原值配白字仅 3.1:1，不足 AA |
-| 红 | `#FF5252` | `#E53935` | 原值配白字仅 3.0:1 |
-
-字体采用技能 `typography.csv` 中 **"Dashboard Data"** 搭配：
-**Fira Code（数字/金额/编码）+ Fira Sans（界面文字）**。
-Fira 不含中文字形，因此字体栈必须回退到 `Microsoft YaHei` 等中文字体，
-否则科目名会掉到浏览器默认字体、破坏等宽数字的对齐。
+字体：**Fira Code（数字/金额/编码）+ Fira Sans（界面文字）**。
+Fira 不含中文字形，字体栈必须回退到 `Microsoft YaHei` 等中文字体，
+否则中文会掉到浏览器默认字体、破坏数字对齐。
 
 ## 已知未完成项
 
-- [ ] 消费分析图表（等后端 `/api/v1/analysis/**` 接口）
-- [ ] 预算页面（后端预算模块未实现）
 - [ ] 源码迁移到 TypeScript（依赖已装，`npm run type-check` 已配置）
-- [ ] 个人资料 / 修改密码页面
-- [ ] 账目导出（CSV/Excel）
+- [ ] 账目导出（目前只有分析结果可导出 CSV）
+
+已完成（曾列在本节）：消费分析图表、预算页面、修改密码与个人资料页面。

@@ -9,17 +9,28 @@
 
 | 部分 | 状态 |
 | --- | --- |
-| 设计文档 | ✅ [系统设计说明书](docs/系统设计说明书.md) · [数据库设计](docs/数据库设计.md) · [前端Brutalism改造说明书](docs/前端Brutalism改造说明书.md) · [前端改版方案](docs/前端改版方案.md) · [数据库备份说明](docs/数据库备份说明.md) · [环境搭建与部署](docs/环境搭建与部署.md) |
-| 数据库 | ✅ 11 张表，Flyway 迁移至 v2（`V1__baseline.sql` + `V2__add_user_deleted_at.sql`） |
-| 后端 | ✅ 记账 / 撤销 / 借贷平衡 / 余额一致性 / 幂等 / 账号注销 / 科目增删改，**69 项验收测试全通过** |
-| 前端 | ✅ Vite + Vue 3 单文件组件，**轻量 Claymorphism** 风格，4 个页面（总览 / 记一笔 / 账目 / 账号设置） |
-| 预算模块 | ⬜ 未实现（表与实体已就绪，算法口径已设计） |
-| 消费分析图表 | ⬜ 未实现（依赖后端 `/api/v1/analysis/**` 接口） |
-| 部署（Nginx/HTTPS） | ⬜ 未实现 |
+| 设计文档 | ✅ [系统设计说明书](docs/系统设计说明书.md) · [数据库设计](docs/数据库设计.md) · [前端改版方案](docs/前端改版方案.md) · [数据库备份说明](docs/数据库备份说明.md) · [环境搭建与部署](docs/环境搭建与部署.md) · [网络环境说明](docs/网络环境说明.md) |
+| 数据库 | ✅ 11 张表，Flyway 迁移至 v3（`V1__baseline.sql` + `V2__add_user_deleted_at.sql` + `V3__drop_ledger_uk_reversal_once.sql`） |
+| 后端 | ✅ **42 个接口**：认证 9 / 科目 9 / 记账 7 / 预算 9 / 分析 8。账务内核含借贷平衡、余额一致性、幂等、并发安全、部分冲正、账号注销 |
+| 前端 | ✅ Vite + Vue 3 单文件组件，**轻量 Claymorphism** 风格，**9 个页面**（登录 / 总览 / 记一笔 / 账目 / 支出分类 / 预算 / 消费分析 / 科目明细 / 账号设置） |
+| 预算模块 | ✅ 总额与分类预算、周/月/自定义周期、滚动结转、预警。AC-08/09 通过 |
+| 消费分析 | ✅ 总览 / 占比 / 趋势 / 同环比 / 贡献度 / 预算执行 / 周期报表 / CSV 导出，ECharts 图表 |
+| 验收测试 | ✅ **287 项全通过**（5 套脚本，覆盖 AC-01 ~ AC-13 全部 13 条） |
+| 部署（Nginx/HTTPS） | ⬜ 未实现（按计划跳过，见 §未做的部分） |
+| 邮件验证码 / Redis / 数据导入 | ⬜ 未实现（按计划跳过，见 §未做的部分） |
 
-> 前端已于 2026-10 由 Brutalism 改为 Claymorphism，并做了一轮精简：
-> 删除「分类与账户」独立页（账户管理并入总览、分类管理并入记账表单），
-> 导航从 5 项降到 4 项。决策依据见 [前端改版方案](docs/前端改版方案.md)。
+> 前端风格于 2026-10 由 Brutalism 改为 Claymorphism，并做过一轮文案精简。
+> 当时的方案主张删掉分类页、导航降到 4 项；后来因缺少分类管理落点，
+> `支出分类` 页重新加回，导航回到 7 项。决策过程与变更记录见
+> [前端改版方案](docs/前端改版方案.md)（开头有"后续变更"说明）。
+
+### 未做的部分（有意为之）
+
+| 项 | 原因 |
+| --- | --- |
+| 邮箱验证码激活（FR-U-01/05/06） | 需要 SMTP 与 Redis，超出毕设范围。`POST /auth/code` 现为占位，直接返回"邮件服务尚未接入" |
+| 修改头像、默认账本（FR-U-03 的一部分） | 系统是单账本设计，界面上也没有任何头像展示位 —— 存了也看不到 |
+| 数据导入 / 部署 | 与邮件验证码同属后续阶段 |
 
 ## 环境要求
 
@@ -131,13 +142,21 @@ npm run build
 
 ```powershell
 Set-Location -LiteralPath '<项目>\backend'
-powershell -ExecutionPolicy Bypass -File .\test-api.ps1              # 69 项验收
-powershell -ExecutionPolicy Bypass -File .\test-delete-account.ps1   # 注销账号
-powershell -ExecutionPolicy Bypass -File .\test-subject-api.ps1      # 科目增删改 + 编码生成
+
+# 五套脚本，合计 287 项
+powershell -ExecutionPolicy Bypass -File .\test-api.ps1              # 69 项  记账核心 + AC-01~06
+powershell -ExecutionPolicy Bypass -File .\test-acceptance.ps1       # 43 项  AC-03/04/05/07/13 + 100 并发
+powershell -ExecutionPolicy Bypass -File .\test-budget.ps1           # 54 项  预算模块 + AC-08/09
+powershell -ExecutionPolicy Bypass -File .\test-analysis.ps1         # 74 项  分析模块 + AC-10/11 + CSV 导出
+powershell -ExecutionPolicy Bypass -File .\test-profile-query.ps1    # 47 项  改密码/改昵称/组合查询/排序/科目明细
+
+# 两个探索型脚本（无汇总行，逐项打印结果，用于人工核对）
+powershell -ExecutionPolicy Bypass -File .\test-subject-api.ps1      # 科目编码生成、删除约束
+powershell -ExecutionPolicy Bypass -File .\test-delete-account.ps1   # 注销流程
 ```
 
-`test-api.ps1` 覆盖设计文档的 AC-01 ～ AC-06 以及非叶子科目、同账户转账、重复撤销等守卫，
-**69 项全通过**才算绿色。另两个脚本覆盖新增的账号注销与科目管理接口。
+**验收标准 AC-01 ~ AC-13 全部 13 条均有对应断言。** 改完任何一处账务逻辑，
+至少要把前五套跑到全绿。
 
 > 新增科目时的编码由 `SubjectService.nextCode` 自动生成，规则与预置模板一致：
 > 根编码是展示段（`1`/`5`），子科目为 `根编码 + 分组段 + 2 位序号`（`100106`）。
@@ -168,16 +187,19 @@ powershell -ExecutionPolicy Bypass -File .\test-subject-api.ps1      # 科目增
 │   ├── 系统设计说明书.md           需求、用例、架构、接口、算法口径、验收标准
 │   ├── 数据库设计.md               表结构、索引、DDL、关键 SQL、预置科目模板
 │   ├── 前端改版方案.md             Claymorphism 改版依据、两处偏离技能规范的理由
-│   ├── 前端Brutalism改造说明书.md   上一版风格的令牌来源（历史）
 │   ├── 数据库备份说明.md           dump vs 搬 datadir 的取舍、还原方法
 │   ├── 环境搭建与部署.md           换机器/拷 U 盘的完整流程、常见问题
 │   └── 网络环境说明.md             离线运行的影响与修复记录（历史）
 ├── backend/
 │   ├── pom.xml                     Spring Boot 3.3.5 父 POM
 │   ├── settings.xml.optional       可选的阿里云镜像配置（默认不生效，需手动指定）
-│   ├── test-api.ps1                69 项端到端验收测试
-│   ├── test-delete-account.ps1     账号注销流程测试
-│   ├── test-subject-api.ps1        科目增删改与编码生成测试
+│   ├── test-api.ps1                69 项：记账核心 + AC-01~06
+│   ├── test-acceptance.ps1         43 项：AC-03/04/05/07/13 + 并发
+│   ├── test-budget.ps1             54 项：预算 + AC-08/09
+│   ├── test-analysis.ps1           74 项：分析 + AC-10/11 + 导出
+│   ├── test-profile-query.ps1      47 项：改密/昵称/查询/排序/明细
+│   ├── test-subject-api.ps1        科目编码与删除约束（探索型）
+│   ├── test-delete-account.ps1     账号注销流程（探索型）
 │   └── src/main/
 │       ├── java/com/example/ledger/
 │       │   ├── common/             统一响应体、错误码、异常处理、金额工具、配置
@@ -185,15 +207,17 @@ powershell -ExecutionPolicy Bypass -File .\test-subject-api.ps1      # 科目增
 │       │   └── module/
 │       │       ├── user/           注册、登录、注销账号、偏好
 │       │       ├── subject/        会计科目树 + 账户 + 期初建账
-│       │       ├── ledger/         ★ 记账内核：分录构造、平衡校验、冲正
-│       │       ├── budget/         预算（表与实体已就绪，服务未实现）
+│       │       ├── ledger/         ★ 记账内核：分录构造、平衡校验、冲正、并发安全
+│       │       ├── budget/         预算：周期铺开、滚动结转、执行率、预警
+│       │       ├── analysis/       消费分析：占比、趋势、同环比、贡献度、CSV 导出
 │       │       └── reconcile/      对账日志
 │       └── resources/
 │           ├── application.yml
 │           ├── logback-spring.xml
 │           ├── db/migration/       Flyway 迁移脚本
 │           │   ├── V1__baseline.sql            基线（11 张表，冻结不可改）
-│           │   └── V2__add_user_deleted_at.sql 注销时间字段
+│           │   ├── V2__add_user_deleted_at.sql 注销时间字段
+│           │   └── V3__drop_ledger_uk_reversal_once.sql 移除与部分冲正冲突的唯一索引
 │           ├── db/schema.sql       手工建表参考脚本
 │           └── static/             ★ 前端构建产物（由 Vite 输出，勿手改）
 └── frontend/                       Vite + Vue 3 工程，见 frontend/README.md
@@ -256,7 +280,7 @@ Maven 本地仓库在 **`D:\m2repo`**，npm 缓存在 **`D:\npm-cache`** —— 
 
 - 生产环境务必覆盖 `app.jwt.secret` 与数据库口令
 - `backend/src/main/resources/static/` 是 Vite 的输出目录，**会被 `npm run build` 清空**，不要在里面放手写文件
-- 修改表结构时：先改 `docs/数据库设计.md`，再新增 `db/migration/V3__*.sql`，
+- 修改表结构时：先改 `docs/数据库设计.md`，再新增 `db/migration/V4__*.sql`，
   **不要修改已执行过的 V1/V2**（Flyway 会校验 checksum 并拒绝启动）
 - `db/dump/` 里**只有文件名以 `-schema` 结尾的**会被提交；完整导出含测试账号密码哈希，已在 `.gitignore` 中排除
 - 所有 `.ps1` 脚本**必须保持纯 ASCII** —— Windows PowerShell 5.1 按 ANSI 读取，

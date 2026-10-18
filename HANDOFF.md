@@ -5,7 +5,7 @@
 > 目的：让一个对本项目一无所知的新会话，能在几分钟内接手，并避开
 > 已经在这些坑上浪费过的时间。
 >
-> 最后更新：2026-10（对应提交 `80069c9`，分支 `main`）
+> 最后更新：2026-10（对应提交 `7f8153d`，分支 `main`）
 
 ---
 
@@ -28,17 +28,20 @@ Get-Content README.md -TotalCount 40
 | 项 | 现状 |
 | --- | --- |
 | 工作目录 | `D:\Capstone Project` |
-| 分支 / HEAD | `main` / `80069c9`（唯一长期分支，实验分支已合并删除） |
-| 提交数 | 3 |
-| 跟踪文件 | 103 个（约 1.1 MB） |
+| 分支 / HEAD | `main` / `7f8153d`（唯一长期分支，实验分支已合并删除） |
+| 提交数 | 16 |
+| 跟踪文件 | 131 个（约 1.5 MB） |
 | 工具链 | JDK 17.0.7、Maven 3.9.3、MySQL 8.0.31、Node v26.11.1 |
-| 数据库 | `personal_ledger`，Flyway 已迁移至 **v2** |
-| 后端测试 | 69 项验收 + 注销 + 科目管理，**三套全通过** |
+| 数据库 | `personal_ledger`，Flyway 已迁移至 **v3** |
+| 后端测试 | **五套 287 项全通过**（69 + 43 + 54 + 74 + 47），AC-01~13 全覆盖 |
 
-**已完成**：设计文档 / 数据库 / 记账内核（分录、平衡校验、反向撤销、三层幂等）/
-账号注销 / 科目增删改 / 前端 4 页（Claymorphism 风格）/ 可移植性改造 / 版本控制
+**已完成**：设计文档 / 数据库 / 记账内核（分录、平衡校验、反向撤销、三层幂等、并发安全）/
+账号注销 / 科目增删改 / 改密码 / 改昵称 / 账目组合查询与排序 / 科目明细页 /
+预算模块（结转与预警）/ 消费分析模块（ECharts + CSV 导出）/
+前端 8 页（Claymorphism 风格）/ 可移植性改造 / 版本控制
 
-**未完成**：消费分析图表、预算模块、AC-07 并发测试、部署（Nginx/HTTPS）
+**未完成（按计划跳过）**：邮箱验证码与 Redis（FR-U-01/05/06）、头像与默认账本（FR-U-03 的一部分，
+本系统没有展示位与多账本概念）、数据导入、部署（Nginx/HTTPS）
 
 ---
 
@@ -229,10 +232,12 @@ mvn -B -f 'D:\Capstone Project\backend\pom.xml' clean package -DskipTests
 # 2. 启动
 & java '-Dfile.encoding=UTF-8' -jar 'D:\Capstone Project\backend\target\personal-ledger-1.0.0-SNAPSHOT.jar'
 
-# 3. 轮询就绪后跑三套测试
+# 3. 轮询就绪后跑五套测试（合计 287 项，全绿才算通过）
 powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-api.ps1'              # 69 项
-powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-delete-account.ps1'
-powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-subject-api.ps1'
+powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-acceptance.ps1'       # 43 项
+powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-budget.ps1'           # 54 项
+powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-analysis.ps1'         # 74 项
+powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-profile-query.ps1'    # 47 项
 ```
 
 改前端时**必须重新 `npm run build`**（产物输出到
@@ -251,10 +256,15 @@ powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-subje
 | `entry` 是唯一真相，`account_meta.balance` 只是缓存 | 缓存由行锁原子更新，另有 `/balance-check` 对账接口校验，两者必须一致 |
 | 撤销用**反向分录法**，原记录永不修改/删除 | append-only，任何时点账目可还原审计（设计文档 §1.3） |
 | 账号注销是**软注销** | 账号失效 + 个人信息清除，但**账务流水保留** —— 物理删除会破坏 append-only。返回文案已如实告知用户 |
-| 界面不出现「借/贷」「科目」 | 面向普通用户。天平组件用「支出方/收入方」，分类页已删除 |
+| 界面不出现「借/贷」「科目」 | 面向普通用户。天平组件用「支出方/收入方」。分类页曾删除、后以「支出分类」形式加回（只管增删改停用，不含会计概念） |
 | Claymorphism **不用技能的粉彩糖果色** | 技能那套定位是 "children's apps"，会削弱财务数据可信度。改用同技能的 Personal Finance Tracker 色板 |
 | `PUBLIC_PATHS` 逐条列出，不用 `/auth/**` 通配 | 曾因此让 `/auth/me` 变成公开接口，令牌吊销后触发 NPE（500） |
 | 科目编码由 `SubjectService.nextCode` 生成 | 规则见 §5，**踩过三个 bug，不要重写这段而不读注释** |
+| 分析模块的 `level` 数的是"用户眼里的分类层级"，不是树深度 | 科目树里「费用」是类型容器，直接用树深度会让 `level=1` 只返回一个 100% 的扇区。实现上 `treeLevel = level + 1` |
+| 同环比在基期为 0 时返回 `rate=null` + `rateAvailable=false` | 0 到 100 的增长率不是 100%。宁可显示「—」+ 说明，也不给一个看起来正常的假数字 |
+| 贡献度返回前自检 `Σ diff_i = totalDiff` | 不成立就记 error 并把贡献率置 null。宁可少给一列，也不画出错的图 |
+| CSV 导出**必须带 UTF-8 BOM** | 不带 BOM 的 UTF-8 CSV 被 Excel 按 GBK 解释，中文列全乱码 |
+| `signed_amount` 是借方为正 | 资产科目 +100 是钱进来，**费用科目 +100 是花出去**。同一符号在不同类型科目里含义相反，写措辞时必须先看 `subjectTypeCode` |
 
 ---
 
@@ -285,13 +295,19 @@ level 3        50010101 早餐              8 位 = 父编码 + 2 位
 
 ## 6. 下一步候选（按建议优先级）
 
+**设计文档里的功能需求（FR-*）已全部落地**，AC-01~13 十三条都有断言。
+剩下的是"按计划跳过"的项，不是遗漏：
+
 | | 任务 | 说明 |
 | --- | --- | --- |
-| **1** | **AC-07 并发测试** | 100 线程各记 1 元，最终余额精确减少 100.00。验证行锁与固定加锁顺序（`applyBalanceDeltas` 按 subjectId 升序）。**内核证据链的最后一块**，工作量小 |
-| **2** | 推到远程仓库 | 目前只有本机 + U 盘，毕设数据有丢失风险 |
-| **3** | 消费分析图表 | 系统唯一完全缺失的核心功能。需先做 `/api/v1/analysis/**`，再用 ECharts |
-| **4** | 预算模块 | 表与实体已就绪，算法口径见设计文档 §7.5 |
-| **5** | 部署（Nginx/HTTPS） | 未开始 |
+| **1** | 推到远程仓库 | 目前只有本机 + U 盘，毕设数据有丢失风险。**用户暂未提供仓库地址**，是唯一真正的待办 |
+| **2** | 邮箱验证码激活（FR-U-01/05/06） | 需 SMTP + Redis。`POST /auth/code` 现为占位，直接返回"邮件服务尚未接入" |
+| **3** | 数据导入 | 与导出对称，未做 |
+| **4** | 部署（Nginx/HTTPS） | 未开始 |
+
+**明确不做的**（有理由，不是没时间）：
+- 修改头像：界面没有任何头像展示位，存了也看不到
+- 默认账本：系统是单账本设计（一个用户一棵科目树），没有可选项
 
 **用户偏好**：倾向"小而美"，反感冗余设计与解释性文案。界面文案只回答
 "我该填什么"和"现在发生了什么"，不解释"系统为什么这么设计"。
@@ -300,19 +316,19 @@ level 3        50010101 早餐              8 位 = 父编码 + 2 位
 
 ## 7. 约定与红线
 
-- **不要修改 `V1__baseline.sql` / `V2__*.sql`** —— Flyway 校验 checksum，
-  改了会拒绝启动。结构变更一律新增 `V3__*.sql`
+- **不要修改已执行的迁移脚本**（`V1`/`V2`/`V3`）—— Flyway 校验 checksum，
+  改了会拒绝启动。结构变更一律新增 `V4__*.sql`
 - `backend/src/main/resources/static/` 是 Vite 输出目录，**会被 `npm run build` 清空**，
   不要放手写文件
 - 依赖缓存在项目**外**：`D:\m2repo`、`D:\npm-cache`。**不要移回项目内** ——
   IDEA 曾因扫描 `.m2repo` 里的 `hutool-parent.pom` 报出 21 条
   `Module 'hutool-*' not found`
-- 已执行过的迁移脚本、`settings.xml`（已删除）、`.mvn/maven.config`（已删除）
-  都是历史包袱，不要恢复
+- `backend/settings.xml` 与 `.mvn/maven.config` 已删除，**不要恢复** ——
+  它们会把依赖缓存指回项目内，重新引出那 21 条 `hutool-*` 报错
 - 提交信息中含中文时，写成文件用 `git commit -F <file>`（PowerShell 不支持 heredoc），
   并确保文件是 **UTF-8 无 BOM**
-- `.skills/` 是第三方技能包（692 文件 / 21 MB），**已 gitignore**，
-  设计令牌来源已记录在 `docs/前端Brutalism改造说明书.md` §0，不必依赖它
+- `.skills/` 是第三方技能包（692 文件 / 21 MB），**已 gitignore**，不必依赖它。
+  原先的 `docs/前端Brutalism改造说明书.md` 已删除 —— 那套风格（brutalism）被推翻
 
 ---
 
