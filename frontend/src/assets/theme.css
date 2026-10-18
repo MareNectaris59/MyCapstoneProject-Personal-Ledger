@@ -766,13 +766,28 @@ tbody tr:hover {
    登录 / 注册
    ========================================================================== */
 
+/* 登录页背景图。
+   图片是浅蓝渐变，白卡片放在正中，对比度足够；但顶部与左上角接近纯白，
+   深色文字若压在那里会偏弱，所以叠了一层从中心向外的浅色径向渐变，
+   把视觉重心压到卡片上，同时不影响四角的波纹观感。
+
+   三层顺序（CSS 里靠前的在上层）：
+     1. 径向渐变：中心提亮、边缘透明 —— 突出卡片
+     2. 图片：cover + center，宽屏两侧裁切也仍是渐变，不会露出破绽
+     3. 纯色渐变：图片加载完成前的兜底底色
+
+   图片经 JPEG q90 压缩（1.4 MB -> 67 KB）。原图是大面积平滑渐变，
+   这个质量下看不出压缩痕迹，而登录页是用户看到的第一个页面，值得为体积让步。 */
 .auth {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
   padding: var(--sp-5);
-  background: linear-gradient(160deg, #eef2ff 0%, var(--bg) 60%);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 55%),
+    url('./login-bg.jpg') center / cover no-repeat,
+    linear-gradient(160deg, #eef2ff 0%, var(--bg) 60%);
 }
 
 .auth__box {
