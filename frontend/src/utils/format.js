@@ -38,19 +38,28 @@ export function currentMonth() {
  * 把科目树压平成叶子列表。
  *
  * 只有叶子科目可以记账（BR-10），所以记账表单的下拉框只应包含叶子。
- * 用全角空格做缩进，保留层级观感。
+ *
+ * **标签用「父分类 / 子分类」路径，而不是空白缩进。**
+ * 早先用 `'\u3000'.repeat(depth)` 做缩进，在原生 <select> 里会显得参差不齐：
+ * 二级叶子（医疗健康）带 1 个缩进、三级叶子（早餐）带 2 个，两段选项的起始位置
+ * 不同，看起来像没对齐。改用路径写法后没有前导空白，天然对齐，而且
+ * 「餐饮 / 早餐」比单纯「早餐」更能说明它属于哪一类。
+ *
+ * 第一层是类型容器（费用 / 收入），不放进路径 ——
+ * 否则会得到「费用 / 餐饮 / 早餐」这种啰嗦且没有信息量的标签。
  */
-export function flattenLeaves(nodes, out = [], depth = 0) {
+export function flattenLeaves(nodes, out = [], depth = 0, ancestors = []) {
   for (const node of nodes || []) {
     if (node.leaf) {
       out.push({
         id: node.id,
         code: node.code,
         name: node.name,
-        label: '\u3000'.repeat(depth) + node.name
+        label: [...ancestors, node.name].join(' / ')
       })
     } else if (node.children?.length) {
-      flattenLeaves(node.children, out, depth + 1)
+      const next = depth === 0 ? ancestors : [...ancestors, node.name]
+      flattenLeaves(node.children, out, depth + 1, next)
     }
   }
   return out

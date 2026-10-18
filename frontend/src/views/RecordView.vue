@@ -222,7 +222,7 @@ async function submit() {
               </button>
             </div>
             <select id="expense-subject" v-model="form.expenseSubjectId">
-              <option value="">请选择</option>
+              <option value="" disabled>请选择</option>
               <option v-for="s in expenseLeaves" :key="s.id" :value="s.id">
                 {{ s.label }}
               </option>
@@ -260,7 +260,7 @@ async function submit() {
           <div class="field">
             <label class="field__label" for="expense-asset">付款账户</label>
             <select id="expense-asset" v-model="form.assetSubjectId">
-              <option value="">请选择</option>
+              <option value="" disabled>请选择</option>
               <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
           </div>
@@ -270,7 +270,7 @@ async function submit() {
           <div class="field">
             <label class="field__label" for="income-asset">收款账户</label>
             <select id="income-asset" v-model="form.assetSubjectId">
-              <option value="">请选择</option>
+              <option value="" disabled>请选择</option>
               <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
           </div>
@@ -282,7 +282,7 @@ async function submit() {
               </button>
             </div>
             <select id="income-subject" v-model="form.incomeSubjectId">
-              <option value="">请选择</option>
+              <option value="" disabled>请选择</option>
               <option v-for="s in incomeLeaves" :key="s.id" :value="s.id">
                 {{ s.label }}
               </option>
@@ -316,14 +316,14 @@ async function submit() {
           <div class="field">
             <label class="field__label" for="from-account">转出账户</label>
             <select id="from-account" v-model="form.fromSubjectId">
-              <option value="">请选择</option>
+              <option value="" disabled>请选择</option>
               <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
           </div>
           <div class="field">
             <label class="field__label" for="to-account">转入账户</label>
             <select id="to-account" v-model="form.toSubjectId">
-              <option value="">请选择</option>
+              <option value="" disabled>请选择</option>
               <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
             <div class="field__hint">

@@ -315,7 +315,7 @@ onMounted(() => {
           <div v-if="form.scopeType === 'SUBJECT'" class="field mb-0">
             <label class="field__label" for="bud-subject">分类</label>
             <select id="bud-subject" v-model="form.subjectId">
-              <option value="">请选择</option>
+              <option value="" disabled>请选择</option>
               <option v-for="s in expenseLeaves" :key="s.id" :value="s.id">{{ s.label }}</option>
             </select>
           </div>
