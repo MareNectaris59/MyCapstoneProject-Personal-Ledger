@@ -159,11 +159,64 @@ Get-Content $f | Select-String 'private |public ' | ForEach-Object { ... }
   ```
 - 用户会手动 kill 后台进程（job 状态显示 `killed before exit`）—— 那是正常操作，不是崩溃
 
-### 2.10 其他
+### 2.10 ⛔ 绝对不要杀 node 进程 —— DSH 自己就是 Node.js
+
+**这是本项目最严重的一条操作禁忌，连续导致 4 次工具调用中途被掐断。**
+
+```powershell
+# 绝对不要执行以下任何一条
+Stop-Process -Name node -Force
+Get-Process node | Stop-Process
+taskkill /F /IM node.exe
+```
+
+症状：命令执行到一半被中断，报
+`The tool call was interrupted after it was recorded, but no result was durably recorded`，
+或 `Windows Job runner exited with exit code 4294967295 before proving its managed range empty`。
+
+原因：DSH（这个 harness）本身运行在 Node.js 上。杀掉 node 等于杀掉正在执行你命令的进程，
+子进程树无法收敛，job runner 只能报错退出。重启电脑后 `Get-Process node` 仍有 2 个进程，
+正是 DSH 自身 —— 这就是最直接的证据。
+
+**这条为什么曾被写进文档**：早期 `npm run dev` 留下孤儿 vite 进程，当时的结论是
+"清理 node 进程"。那个结论在 DSH 环境下是**危险的**，已作废。
+若确实需要清理 vite 残留，只按 PID 精确处理，并先确认该 PID 不是 DSH：
+```powershell
+Get-Process node | Select-Object Id, StartTime, Path
+# 只有当 Path 指向 frontend/node_modules/vite 时才是 vite，其余一律不要动
+```
+
+### 2.11 前端构建：esbuild 会删不掉临时文件（已解决）
+
+症状：
+```
+[vite:esbuild-transpile] remove C:\Users\...\Temp\esbuild-<hash>: Access is denied.
+```
+
+成因：`vite:esbuild-transpile` 把语法降级交给 esbuild 的 Go 子进程；产物较大时
+（引入 ECharts 后分包到 MB 级）esbuild 改用"临时文件"而非 stdio 传递数据，
+写完再删除该文件，在本机被安全软件锁住 → 整个构建失败。
+
+**解决（已写入 `frontend/vite.config.js`，必须两条同时设）**：
+```js
+build: {
+  minify: 'terser',   // 压缩交给 terser，不经过 esbuild
+  target: 'esnext',   // 跳过语法降级，不注册 vite:esbuild-transpile
+}
+```
+只设其中一条无效 —— 实测 `minify: 'terser'` 单独设仍失败，`target: 'esnext'` 单独设也失败。
+`terser` 已加入 devDependencies。
+
+`--minify=false` 也能绕过，但产物大 3 倍，不建议作为默认值。
+
+### 2.12 其他
 
 - 控制台输出中文会乱码（ANSI/UTF-8 混用），**不要据此判断文件内容**；用 `read` 工具看
 - `Get-ChildItem` 的 `-Filter` 在路径不存在时返回空而不报错，会掩盖问题
 - 新增 `.ps1` 后要 `git add`，`.gitignore` 未排除脚本
+- `npm exec` / `npm --prefix` **不会**改变工作目录，Vite 会因找不到 `index.html` 而失败；
+  `npm run <script>` 会切到包目录，或用 `node node_modules/vite/bin/vite.js build <root>`
+  把根目录作为位置参数传入
 
 ---
 

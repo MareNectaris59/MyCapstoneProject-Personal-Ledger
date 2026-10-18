@@ -41,6 +41,12 @@ const routes = [
     meta: { title: '预算' }
   },
   {
+    path: '/analysis',
+    name: 'analysis',
+    component: () => import('@/views/AnalysisView.vue'),
+    meta: { title: '消费分析' }
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('@/views/SettingsView.vue'),

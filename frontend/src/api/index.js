@@ -162,7 +162,44 @@ export const api = {
   budgetAlerts: () => http.get('/budgets/alerts'),
 
   /** 标记预警已读。 */
-  readBudgetAlert: (id) => http.put(`/budgets/alerts/${id}/read`)
+  readBudgetAlert: (id) => http.put(`/budgets/alerts/${id}/read`),
+
+  // ---- 消费分析 ----
+  /**
+   * 期间总览：收入、支出、结余、净资产。
+   *
+   * @param params { startDate?, endDate? }（yyyy-MM-dd）都不传时后端默认本月
+   */
+  analysisOverview: (params) => http.get('/analysis/overview', { params }),
+
+  /**
+   * 类别占比。
+   *
+   * level 数的是"用户眼里的分类层级"而不是树深度：
+   *   level=1 -> 餐饮 / 交通 / 居住
+   *   level=2 -> 午餐 / 打车
+   * （科目树里"费用"是类型容器，不作为分类返回）
+   */
+  analysisCategoryShare: (params) => http.get('/analysis/category-share', { params }),
+
+  /**
+   * 消费趋势。
+   *
+   * 只返回有数据的周期，缺失月份不会补 0 —— 补 0 会让折线出现
+   * "某月突然归零"的假象。若图表需要连续横轴，由前端自行补点。
+   */
+  analysisTrend: (params) => http.get('/analysis/trend', { params }),
+
+  /**
+   * 同比 + 环比。
+   *
+   * rate 为 null 表示"基期无数据"，此时 rateAvailable=false，
+   * 前端应展示"—"并给出 note，而不是 0% 或 ∞。
+   */
+  analysisCompare: (params) => http.get('/analysis/compare', { params }),
+
+  /** 类别贡献度：谁造成了增减。正负分列，用于双向条形图。 */
+  analysisContribution: (params) => http.get('/analysis/contribution', { params })
 }
 
 export default http
