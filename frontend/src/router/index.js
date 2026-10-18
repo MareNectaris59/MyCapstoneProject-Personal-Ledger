@@ -35,6 +35,12 @@ const routes = [
     meta: { title: '账目' }
   },
   {
+    path: '/categories',
+    name: 'categories',
+    component: () => import('@/views/CategoryView.vue'),
+    meta: { title: '支出分类' }
+  },
+  {
     path: '/budgets',
     name: 'budgets',
     component: () => import('@/views/BudgetView.vue'),

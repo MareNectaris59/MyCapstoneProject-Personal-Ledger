@@ -289,6 +289,20 @@ public class SubjectService {
                     "该类型的根科目不存在，无法新增科目");
         }
 
+        // 同父级下不允许重名。两个同名分类在记账下拉框里无法区分，用户会
+        // 立刻后悔；提前拦住比事后让他自己发现便宜。与 rename 里的校验
+        // 保持同一口径 —— 否则会出现"改名被拒、新建却允许"的矛盾行为（实测踩过）。
+        Long siblingParent = parentId == null ? typeRoot.getId() : parentId;
+        Long sameName = subjectMapper.selectCount(new LambdaQueryWrapper<Subject>()
+                .eq(Subject::getUserId, userId)
+                .eq(Subject::getSubjectType, type)
+                .eq(Subject::getParentId, siblingParent)
+                .eq(Subject::getName, subject.getName()));
+        if (sameName != null && sameName > 0) {
+            throw BizException.of(ResultCode.PARAM_INVALID,
+                    "同一类目下已有同名分类：" + subject.getName());
+        }
+
         Long parent = parentId == null ? typeRoot.getId() : parentId;
         if (parent.equals(typeRoot.getId())) {
             subject.setParentId(typeRoot.getId());
@@ -420,6 +434,43 @@ public class SubjectService {
     private AccountMeta findAccountMeta(Long subjectId) {
         return accountMetaMapper.selectOne(new LambdaQueryWrapper<AccountMeta>()
                 .eq(AccountMeta::getSubjectId, subjectId));
+    }
+
+    /**
+     * 重命名科目。
+     *
+     * <p>只改名称，不动编码/层级/父级 —— 这些由 create 时的规则决定，
+     * 改了会让科目树与历史分录的展示语义错位（编码还挂着旧名字的位置）。
+     *
+     * <p>不允许与同父级下的兄弟重名：两个都叫「午餐」的叶子在记账下拉框里
+     * 无法区分，属于用户会立刻后悔的输入，提前拦住比事后解释便宜。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Subject rename(Long userId, Long subjectId, String newName) {
+        if (newName == null || newName.isBlank()) {
+            throw BizException.of(ResultCode.PARAM_INVALID, "科目名称不能为空");
+        }
+        Subject s = requireOwned(userId, subjectId);
+        String name = newName.trim();
+        if (name.equals(s.getName())) {
+            return s;
+        }
+
+        // 同父级下重名校验（含根级 parentId = 0）
+        Long parentKey = s.getParentId() == null ? 0L : s.getParentId();
+        Long dup = subjectMapper.selectCount(new LambdaQueryWrapper<Subject>()
+                .eq(Subject::getUserId, userId)
+                .eq(Subject::getSubjectType, s.getSubjectType())
+                .eq(Subject::getParentId, parentKey)
+                .eq(Subject::getName, name)
+                .ne(Subject::getId, s.getId()));
+        if (dup != null && dup > 0) {
+            throw BizException.of(ResultCode.PARAM_INVALID, "同一类目下已有同名分类：" + name);
+        }
+
+        s.setName(name);
+        subjectMapper.updateById(s);
+        return s;
     }
 
     private Subject requireOwned(Long userId, Long subjectId) {

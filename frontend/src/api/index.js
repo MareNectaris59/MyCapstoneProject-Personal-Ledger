@@ -106,6 +106,14 @@ export const api = {
   setSubjectEnabled: (id, enabled) =>
     http.put(`/subjects/${id}/enabled`, null, { params: { enabled } }),
 
+  /**
+   * 重命名科目。
+   *
+   * 只改名称，不动编码 / 层级 / 父级 —— 这些由创建时的规则决定。
+   * 同一父级下不允许重名（后端会拒绝），否则记账下拉框里两项无法区分。
+   */
+  renameSubject: (id, name) => http.put(`/subjects/${id}`, { name }),
+
   /** 删除科目。存在子科目或已被账目引用时后端会拒绝（错误码 1302 / 1303）。 */
   deleteSubject: (id) => http.delete(`/subjects/${id}`),
 

@@ -7,7 +7,9 @@ import com.example.ledger.module.subject.entity.Subject;
 import com.example.ledger.module.subject.service.SubjectService;
 import com.example.ledger.security.CurrentUser;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -81,6 +83,21 @@ public class SubjectController {
     }
 
     /** 启用/停用科目 */
+    /** 重命名科目（只改名称，不动层级与编码）。 */
+    @PutMapping("/{id:\\d+}")
+    public Result<Subject> rename(@AuthenticationPrincipal CurrentUser user,
+                                  @PathVariable Long id,
+                                  @Valid @RequestBody RenameRequest req) {
+        return Result.success(subjectService.rename(user.userId(), id, req.name()));
+    }
+
+    /** 重命名请求体。 */
+    public record RenameRequest(
+            @NotBlank(message = "分类名称不能为空")
+            @Size(max = 64, message = "名称不能超过 64 字")
+            String name) {
+    }
+
     @PutMapping("/{id:\\d+}/enabled")
     public Result<Void> setEnabled(@AuthenticationPrincipal CurrentUser user,
                                    @PathVariable Long id,

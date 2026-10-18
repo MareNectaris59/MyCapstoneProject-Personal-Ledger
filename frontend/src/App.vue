@@ -23,6 +23,7 @@ const navItems = [
   { to: '/', label: '总览' },
   { to: '/record', label: '记一笔' },
   { to: '/ledgers', label: '账目' },
+  { to: '/categories', label: '支出分类' },
   { to: '/budgets', label: '预算' },
   { to: '/analysis', label: '消费分析' },
   { to: '/settings', label: '账号设置' }

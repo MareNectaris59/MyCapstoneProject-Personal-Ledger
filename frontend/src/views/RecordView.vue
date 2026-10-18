@@ -221,7 +221,7 @@ async function submit() {
                 + 新建
               </button>
             </div>
-            <select id="expense-subject" v-model="form.expenseSubjectId">
+            <select id="expense-subject" v-model="form.expenseSubjectId" :class="{ 'is-placeholder': !form.expenseSubjectId }">
               <option value="" disabled>请选择</option>
               <option v-for="s in expenseLeaves" :key="s.id" :value="s.id">
                 {{ s.label }}
@@ -259,7 +259,7 @@ async function submit() {
 
           <div class="field">
             <label class="field__label" for="expense-asset">付款账户</label>
-            <select id="expense-asset" v-model="form.assetSubjectId">
+            <select id="expense-asset" v-model="form.assetSubjectId" :class="{ 'is-placeholder': !form.assetSubjectId }">
               <option value="" disabled>请选择</option>
               <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
@@ -269,7 +269,7 @@ async function submit() {
         <template v-else-if="tab === 'income'">
           <div class="field">
             <label class="field__label" for="income-asset">收款账户</label>
-            <select id="income-asset" v-model="form.assetSubjectId">
+            <select id="income-asset" v-model="form.assetSubjectId" :class="{ 'is-placeholder': !form.assetSubjectId }">
               <option value="" disabled>请选择</option>
               <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
@@ -281,7 +281,7 @@ async function submit() {
                 + 新建
               </button>
             </div>
-            <select id="income-subject" v-model="form.incomeSubjectId">
+            <select id="income-subject" v-model="form.incomeSubjectId" :class="{ 'is-placeholder': !form.incomeSubjectId }">
               <option value="" disabled>请选择</option>
               <option v-for="s in incomeLeaves" :key="s.id" :value="s.id">
                 {{ s.label }}
@@ -315,14 +315,14 @@ async function submit() {
         <template v-else>
           <div class="field">
             <label class="field__label" for="from-account">转出账户</label>
-            <select id="from-account" v-model="form.fromSubjectId">
+            <select id="from-account" v-model="form.fromSubjectId" :class="{ 'is-placeholder': !form.fromSubjectId }">
               <option value="" disabled>请选择</option>
               <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
           </div>
           <div class="field">
             <label class="field__label" for="to-account">转入账户</label>
-            <select id="to-account" v-model="form.toSubjectId">
+            <select id="to-account" v-model="form.toSubjectId" :class="{ 'is-placeholder': !form.toSubjectId }">
               <option value="" disabled>请选择</option>
               <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
