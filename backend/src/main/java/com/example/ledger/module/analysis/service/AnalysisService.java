@@ -467,6 +467,65 @@ public class AnalysisService {
         return new AnalysisDtos.BudgetExecution(
                 b.id(), b.name(), b.scopeType(), b.subjectName(), b.amount(), points);
     }
+    // ================================================================== 导出
+
+    /**
+     * 导出分析结果为 CSV（§6.2.6 的 /analysis/export）。
+     *
+     * <p><b>为什么返回 String 而不是直接写响应流</b>：CSV 生成属于业务逻辑
+     * （取数、口径、列顺序），写 HTTP 响应属于表现层。分开之后可以单测，
+     * 也避免 Service 依赖 Servlet API。
+     *
+     * @param type trend（趋势）或 category（类别占比）
+     */
+    public String exportCsv(Long userId, String type, String granularity,
+                            LocalDate startDate, LocalDate endDate, Integer level) {
+        String kind = (type == null || type.isBlank()) ? "trend" : type.toLowerCase();
+        StringBuilder csv = new StringBuilder();
+
+        switch (kind) {
+            case "category" -> {
+                AnalysisDtos.CategoryShare share =
+                        categoryShare(userId, startDate, endDate, level, null);
+                csv.append("分类,金额,占比(%)\n");
+                for (AnalysisDtos.CategoryShareItem item : share.items()) {
+                    csv.append(csvField(item.subjectName())).append(',')
+                       .append(csvField(item.amount())).append(',')
+                       .append(csvField(item.share())).append('\n');
+                }
+                csv.append("合计,").append(csvField(share.total())).append(",\n");
+            }
+            default -> {
+                AnalysisDtos.Trend trend = trend(userId, granularity, startDate, endDate, null);
+                csv.append("期间,金额\n");
+                for (AnalysisDtos.TrendPoint p : trend.points()) {
+                    csv.append(csvField(p.period())).append(',')
+                       .append(csvField(p.amount())).append('\n');
+                }
+                csv.append("合计,").append(csvField(trend.total())).append('\n');
+            }
+        }
+        return csv.toString();
+    }
+
+    /**
+     * CSV 字段转义（RFC 4180）。
+     *
+     * <p>含逗号、双引号、换行的字段必须整体加双引号，内部的双引号要成对。
+     * 不转义的话，一个叫「餐饮,外卖」的分类会把整行切成三列。
+     */
+    private static String csvField(String value) {
+        if (value == null) {
+            return "";
+        }
+        boolean needQuote = value.contains(",") || value.contains("\"")
+                || value.contains("\n") || value.contains("\r");
+        if (!needQuote) {
+            return value;
+        }
+        return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
+
     // ================================================================== 内部
 
     private static final BigDecimal HUNDRED = new BigDecimal("100");

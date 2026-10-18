@@ -294,6 +294,42 @@ function rateNote(base) {
   return base && !base.rateAvailable && base.note ? base.note : ''
 }
 
+/* ---------------- 导出 ---------------- */
+
+const exporting = ref(false)
+
+/**
+ * 导出当前期间的 CSV。
+ *
+ * 后端返回裸 CSV（带 UTF-8 BOM，Excel 直接打开中文不乱码），
+ * 所以用 Blob + 临时 <a> 触发下载，而不是常规的 JSON 请求。
+ */
+async function exportCsv(type) {
+  exporting.value = true
+  try {
+    const blob = await api.downloadAnalysisCsv({
+      type,
+      granularity: 'MONTH',
+      startDate: range.value.startDate,
+      endDate: range.value.endDate
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = type === 'category' ? '支出分类汇总.csv' : '支出趋势.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    // 必须撤销，否则这个 Blob 会一直占着内存直到页面关闭
+    URL.revokeObjectURL(url)
+    auth.notify('ok', '已导出')
+  } catch (e) {
+    auth.notify('error', e.message)
+  } finally {
+    exporting.value = false
+  }
+}
+
 watch(preset, (n, o) => {
   if (o) notifyRange(PRESETS.find((p) => p.key === n) || { label: n })
   load()
@@ -325,6 +361,14 @@ onBeforeUnmount(() => {
         @click="preset = p.key"
       >
         {{ p.label }}
+      </button>
+    </div>
+    <div class="export-group">
+      <button class="btn--ghost btn--sm" :disabled="exporting" @click="exportCsv('category')">
+        {{ exporting ? '导出中…' : '导出分类 CSV' }}
+      </button>
+      <button class="btn--ghost btn--sm" :disabled="exporting" @click="exportCsv('trend')">
+        导出趋势 CSV
       </button>
     </div>
   </div>
@@ -431,4 +475,5 @@ onBeforeUnmount(() => {
   background: var(--primary) !important;
   color: var(--on-primary) !important;
 }
+.export-group { display: flex; gap: 4px; margin-left: auto; }
 </style>

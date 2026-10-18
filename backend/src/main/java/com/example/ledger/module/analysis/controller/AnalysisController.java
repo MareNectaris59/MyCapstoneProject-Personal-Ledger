@@ -49,6 +49,47 @@ public class AnalysisController {
         return Result.success(analysisService.budgetExecution(user.userId(), budgetId, periodCount));
     }
 
+    /**
+     * 导出分析结果（CSV）。
+     *
+     * <p>这是本模块唯一返回非 JSON 的接口 —— 文件下载无法塞进统一响应体。
+     * 因此直接用 {@code ResponseEntity<byte[]>} 输出 {@code text/csv}。
+     *
+     * <p><b>必须带 UTF-8 BOM。</b>Excel 打开不带 BOM 的 UTF-8 CSV 时，
+     * 会按本地编码（简体中文 Windows 上是 GBK）解释，中文列全部变乱码。
+     * 这是最常见的"导出的表格打不开/是乱码"投诉来源，一个字节就能避免。
+     *
+     * @param type trend（趋势）或 category（类别占比），默认 trend
+     */
+    @GetMapping("/export")
+    public org.springframework.http.ResponseEntity<byte[]> export(
+            @AuthenticationPrincipal CurrentUser user,
+            @RequestParam(required = false, defaultValue = "trend") String type,
+            @RequestParam(required = false) String granularity,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Integer level) {
+
+        String csv = analysisService.exportCsv(user.userId(), type, granularity, startDate, endDate, level);
+
+        // BOM: EF BB BF。缺了它 Excel 会把 UTF-8 当 GBK 解，中文全乱码。
+        byte[] bom = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+        byte[] body = csv.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] payload = new byte[bom.length + body.length];
+        System.arraycopy(bom, 0, payload, 0, bom.length);
+        System.arraycopy(body, 0, payload, bom.length, body.length);
+
+        // 文件名用纯 ASCII：HTTP 头里放中文要 RFC 5987 编码，
+        // 而 Excel/WPS 对 filename* 的支持参差，不值得为此冒险。
+        String filename = "analysis-" + ("category".equalsIgnoreCase(type) ? "category" : "trend") + ".csv";
+
+        return org.springframework.http.ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + filename + "\"")
+                .body(payload);
+    }
+
     /** 期间总览：收入、支出、结余、净资产。 */
     @GetMapping("/overview")
     public Result<AnalysisDtos.Overview> overview(

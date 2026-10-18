@@ -207,7 +207,27 @@ export const api = {
   analysisCompare: (params) => http.get('/analysis/compare', { params }),
 
   /** 类别贡献度：谁造成了增减。正负分列，用于双向条形图。 */
-  analysisContribution: (params) => http.get('/analysis/contribution', { params })
+  analysisContribution: (params) => http.get('/analysis/contribution', { params }),
+
+  /**
+   * 下载分析结果 CSV。
+   *
+   * **刻意不走上面的 `http` 实例**：它的响应拦截器会按 `{code, message, data}`
+   * 解包，而这里后端返回的是裸 CSV（文件下载无法塞进统一响应体）。
+   * 因此用裸 axios + responseType 'blob'，并自己补 Authorization 头。
+   *
+   * @returns {Promise<Blob>} 调用方用 URL.createObjectURL 触发下载
+   */
+  downloadAnalysisCsv: async (params) => {
+    const token = sessionStorage.getItem('accessToken')
+    const resp = await axios.get('/api/v1/analysis/export', {
+      params,
+      responseType: 'blob',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      timeout: 30000
+    })
+    return resp.data
+  }
 }
 
 export default http

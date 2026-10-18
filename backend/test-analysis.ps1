@@ -304,6 +304,61 @@ Check 'user A total unaffected by user B' $mine.data.total '380.00'
 $foreign = Call GET "/api/v1/analysis/trend?granularity=MONTH&startDate=2026-09-01&endDate=2026-10-31&subjectId=$($other.lunchId)" $null $token
 Check-Rejected 'analysis refuses another user subjectId' $foreign 1301
 
+# ------------------------------------------------------------------ export
+Write-Host ''
+Write-Host '=== export (CSV) ===' -ForegroundColor Cyan
+
+# The export endpoint is the one non-JSON response in this module, so it needs
+# its own request path: it returns text/csv with a UTF-8 BOM, not a Result body.
+function Get-Csv([string]$path, [string]$tok) {
+    $req = New-Object System.Net.Http.HttpRequestMessage(
+        [System.Net.Http.HttpMethod]::new('GET'), "$BaseUrl$path")
+    $req.Headers.Authorization =
+        New-Object System.Net.Http.Headers.AuthenticationHeaderValue('Bearer', $tok)
+    $resp = $script:http.SendAsync($req).GetAwaiter().GetResult()
+    $bytes = $resp.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+    $status = [int]$resp.StatusCode
+    $ctype = $resp.Content.Headers.ContentType.ToString()
+    $disp = if ($resp.Content.Headers.ContentDisposition) { $resp.Content.Headers.ContentDisposition.ToString() } else { '' }
+    $resp.Dispose(); $req.Dispose()
+    $text = [Text.Encoding]::UTF8.GetString($bytes)
+    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) { $text = $text.Substring(1) }
+    return @{ http = $status; ctype = $ctype; disp = $disp; text = $text; bom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) }
+}
+
+$csvCat = Get-Csv '/api/v1/analysis/export?type=category&startDate=2026-10-01&endDate=2026-10-31' $token
+Check 'export category HTTP' $csvCat.http 200
+Check 'export is text/csv' ($csvCat.ctype -like 'text/csv*') $true
+Check 'export sends a UTF-8 BOM (Excel needs it)' $csvCat.bom $true
+Check 'export sets attachment filename' ($csvCat.disp -like '*analysis-category.csv*') $true
+$csvLines = $csvCat.text -split "`r?`n" | Where-Object { $_ -ne '' }
+# Header text is Chinese, and this file must stay pure ASCII (see the top note),
+# so expected values are built from character codes.
+#   header words -> codepoints:
+#     category header: U+5206 U+7C7B (category), U+91D1 U+989D (amount), U+5360 U+6BD4 (share)
+#     trend header   : U+671F U+95F4 (period), U+91D1 U+989D (amount)
+#     totals label   : U+5408 U+8BA1 (total)
+$u = { param([int[]]$c) -join ($c | ForEach-Object { [char]$_ }) }
+$HDR_CAT   = (& $u 0x5206,0x7C7B) + ',' + (& $u 0x91D1,0x989D) + ',' + (& $u 0x5360,0x6BD4) + '(%)'
+$HDR_TREND = (& $u 0x671F,0x95F4) + ',' + (& $u 0x91D1,0x989D)
+$TOTAL     = (& $u 0x5408,0x8BA1)
+
+Check 'export category header row' $csvLines[0] $HDR_CAT
+Check-True 'export category has a data row' ($csvLines.Count -ge 3)
+Check 'export category totals row' $csvLines[-1] ($TOTAL + ',230.00,')
+
+$csvTrend = Get-Csv '/api/v1/analysis/export?type=trend&granularity=MONTH&startDate=2026-09-01&endDate=2026-10-31' $token
+Check 'export trend HTTP' $csvTrend.http 200
+$trendLines = $csvTrend.text -split "`r?`n" | Where-Object { $_ -ne '' }
+Check 'export trend header row' $trendLines[0] $HDR_TREND
+Check 'export trend totals row' $trendLines[-1] ($TOTAL + ',380.00')
+
+# CSV escaping: a field containing a comma must be quoted, or the row gains a column.
+# The preset tree has no comma-named subject, so assert the helper indirectly by
+# checking that every data row has the expected column count.
+$colCounts = $csvCat.text -split "`r?`n" | Where-Object { $_ -ne '' } | ForEach-Object { ($_.Split(',')).Count }
+Check-True 'export rows keep a stable column count' (($colCounts | Select-Object -Unique).Count -eq 1)
+
 # ------------------------------------------------------------------ guards
 Write-Host ''
 Write-Host '=== guards ===' -ForegroundColor Cyan
