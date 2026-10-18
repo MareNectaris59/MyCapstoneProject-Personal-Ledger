@@ -35,6 +35,20 @@ public class AnalysisController {
         this.analysisService = analysisService;
     }
 
+    /**
+     * 预算执行分析：预算 vs 实际，多周期。
+     *
+     * @param budgetId    必填，要分析的预算
+     * @param periodCount 只返回最近 N 期，为空表示全部
+     */
+    @GetMapping("/budget-execution")
+    public Result<AnalysisDtos.BudgetExecution> budgetExecution(
+            @AuthenticationPrincipal CurrentUser user,
+            @RequestParam Long budgetId,
+            @RequestParam(required = false) Integer periodCount) {
+        return Result.success(analysisService.budgetExecution(user.userId(), budgetId, periodCount));
+    }
+
     /** 期间总览：收入、支出、结余、净资产。 */
     @GetMapping("/overview")
     public Result<AnalysisDtos.Overview> overview(

@@ -7,6 +7,8 @@ import com.example.ledger.common.result.ResultCode;
 import com.example.ledger.common.util.MoneyUtil;
 import com.example.ledger.module.analysis.dto.AnalysisDtos;
 import com.example.ledger.module.analysis.mapper.AnalysisMapper;
+import com.example.ledger.module.budget.dto.BudgetDtos;
+import com.example.ledger.module.budget.service.BudgetService;
 import com.example.ledger.module.subject.entity.Subject;
 import com.example.ledger.module.subject.mapper.SubjectMapper;
 import org.slf4j.Logger;
@@ -55,10 +57,14 @@ public class AnalysisService {
 
     private final AnalysisMapper analysisMapper;
     private final SubjectMapper subjectMapper;
+    private final BudgetService budgetService;
 
-    public AnalysisService(AnalysisMapper analysisMapper, SubjectMapper subjectMapper) {
+    public AnalysisService(AnalysisMapper analysisMapper,
+                           SubjectMapper subjectMapper,
+                           BudgetService budgetService) {
         this.analysisMapper = analysisMapper;
         this.subjectMapper = subjectMapper;
+        this.budgetService = budgetService;
     }
 
     // ================================================================== 总览
@@ -420,6 +426,47 @@ public class AnalysisService {
                 kept, money(othersDiff));
     }
 
+    // ================================================================== 预算执行
+
+    /**
+     * 预算执行分析：预算 vs 实际，多周期（§6.2.6 的 /analysis/budget-execution）。
+     *
+     * <p>数据复用 {@code BudgetService.periods} —— 它已经负责"每次由 entry 重算
+     * 已用额"以及结转账的递推，这里只做视图裁剪，<b>不重算</b>任何金额。
+     * 这样预算页与分析页的数字永远一致，不会出现"两处各算一遍然后对不上"。
+     *
+     * @param periodCount 只返回最近 N 期，null 表示全部
+     */
+    public AnalysisDtos.BudgetExecution budgetExecution(Long userId, Long budgetId, Integer periodCount) {
+        BudgetDtos.BudgetDetail detail = budgetService.detail(userId, budgetId);
+        BudgetDtos.BudgetView b = detail.budget();
+
+        // 只保留"已经开始"的周期。长期预算会预生成未来若干期（可用额随结转
+        // 一路累加，如 1000/2000/3000…），把未来周期画进图表是噪音：
+        // 它们没有任何实际发生额。实测踩过：periodCount=3 取到了 2027 年的空周期。
+        LocalDate today = LocalDate.now();
+        java.util.List<BudgetDtos.PeriodView> all = new ArrayList<>();
+        for (BudgetDtos.PeriodView pv : detail.periods()) {
+            if (!pv.startDate().isAfter(today)) {
+                all.add(pv);
+            }
+        }
+
+        int from = 0;
+        if (periodCount != null && periodCount > 0 && all.size() > periodCount) {
+            from = all.size() - periodCount;
+        }
+        List<AnalysisDtos.BudgetExecutionPoint> points = new ArrayList<>();
+        for (int i = from; i < all.size(); i++) {
+            BudgetDtos.PeriodView p = all.get(i);
+            points.add(new AnalysisDtos.BudgetExecutionPoint(
+                    p.periodLabel(), p.startDate(), p.endDate(),
+                    p.availableAmount(), p.usedAmount(), p.executionRate()));
+        }
+
+        return new AnalysisDtos.BudgetExecution(
+                b.id(), b.name(), b.scopeType(), b.subjectName(), b.amount(), points);
+    }
     // ================================================================== 内部
 
     private static final BigDecimal HUNDRED = new BigDecimal("100");

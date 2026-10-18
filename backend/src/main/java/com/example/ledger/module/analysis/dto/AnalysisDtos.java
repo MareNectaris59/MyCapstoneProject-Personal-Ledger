@@ -128,6 +128,35 @@ public final class AnalysisDtos {
     ) {
     }
 
+    // ------------------------------------------------------------------ 预算执行
+
+    /** 预算执行分析的一项（预算 vs 实际，单周期）。 */
+    public record BudgetExecutionPoint(
+            String period,
+            LocalDate startDate,
+            LocalDate endDate,
+            String availableAmount,
+            String usedAmount,
+            String executionRate
+    ) {
+    }
+
+    /**
+     * 预算执行分析：预算 vs 实际，多周期序列。
+     *
+     * <p>数据源是 {@code budget_period} 的结算结果，与 {@code /budgets/{id}/periods}
+     * 同源；这里只返回图表需要的字段，并可按 {@code periodCount} 截取最近若干期。
+     */
+    public record BudgetExecution(
+            Long budgetId,
+            String budgetName,
+            String scopeType,
+            String subjectName,
+            String baseAmount,
+            List<BudgetExecutionPoint> points
+    ) {
+    }
+
     // ------------------------------------------------------------------ 贡献度
 
     /**
