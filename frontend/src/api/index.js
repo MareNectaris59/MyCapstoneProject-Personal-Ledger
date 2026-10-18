@@ -77,6 +77,17 @@ export const api = {
   login: (payload) => http.post('/auth/login', payload),
   logout: () => http.post('/auth/logout', {}),
   me: () => http.get('/auth/me'),
+
+  /**
+   * 修改密码（FR-U-04）。需校验原密码。
+   *
+   * 成功后服务端会认为本次会话仍有效（无状态 JWT），所以前端要主动清令牌并
+   * 回登录页 —— 见 SettingsView 的处理。
+   */
+  changePassword: (payload) => http.put('/auth/password', payload),
+
+  /** 修改资料（FR-U-03），目前只支持昵称。返回更新后的用户信息。 */
+  updateProfile: (payload) => http.put('/auth/profile', payload),
   /**
    * 注销账号（删除账号，不是退出登录）。
    * 需要密码二次确认；注销后账号永久失效，同一邮箱可重新注册。

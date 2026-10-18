@@ -2,16 +2,16 @@
 /**
  * 账号设置。
  *
- * 目前只有注销账号一项 —— 系统中唯一不可逆的操作，所以单独成页，
- * 不和日常记账功能混在一起，避免误触。
+ * 三件事：改昵称、改密码、注销账号。
  *
- * 确认方式：**输入注册邮箱** + 输入登录密码。两道各自表达不同的事：
+ * 改密码和注销都要求校验原密码/邮箱，理由相同：
  *   - 邮箱证明"你是这个账号的主人"（邮箱是账号的唯一标识）
  *   - 密码证明"你是本人"（防止设备被他人短暂接触）
+ * 只凭一个已登录的会话就允许改密码或注销，等于把账号交给任何摸到设备的人。
  *
- * 上一版要求用户逐字输入「注销账号」四个字。那个模式（GitHub 用仓库名、
- * Vercel 用项目名）适用于批量或破坏性删除，用在"注销自己的账号"上很别扭 ——
- * 用户会想"我当然知道我要注销，为什么还要我抄一遍"。
+ * 注销的确认方式演化过：上一版要求逐字输入「注销账号」四个字。那个模式
+ * （GitHub 用仓库名、Vercel 用项目名）适用于批量或破坏性删除，用在"注销
+ * 自己的账号"上很别扭 —— 用户会想"我当然知道我要注销，为什么还要我抄一遍"。
  */
 import { ref, computed } from 'vue'
 import { api } from '@/api'
@@ -25,6 +25,84 @@ const password = ref('')
 const reason = ref('')
 const busy = ref(false)
 const errorMsg = ref('')
+
+/* ---------------- 改昵称 ---------------- */
+
+const nickname = ref(auth.user?.nickname || '')
+const savingNickname = ref(false)
+
+const nicknameChanged = computed(
+  () => nickname.value.trim().length > 0 && nickname.value.trim() !== (auth.user?.nickname || '')
+)
+
+async function saveNickname() {
+  if (!nicknameChanged.value) return
+  savingNickname.value = true
+  try {
+    const info = await api.updateProfile({ nickname: nickname.value.trim() })
+    // 用后端返回的最新用户信息刷新侧边栏，避免再发一次 /auth/me
+    auth.user = { ...auth.user, ...info }
+    auth.notify('ok', '昵称已更新')
+  } catch (e) {
+    auth.notify('error', e.message)
+  } finally {
+    savingNickname.value = false
+  }
+}
+
+/* ---------------- 改密码 ---------------- */
+
+const oldPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const savingPassword = ref(false)
+const passwordError = ref('')
+
+/** 与后端 / 注册表单保持一致：8-64 位 */
+const newPasswordValid = computed(
+  () => newPassword.value.length >= 8 && newPassword.value.length <= 64
+)
+const confirmMatches = computed(
+  () => confirmPassword.value.length > 0 && confirmPassword.value === newPassword.value
+)
+const canSavePassword = computed(
+  () =>
+    oldPassword.value.length > 0 &&
+    newPasswordValid.value &&
+    confirmMatches.value &&
+    !savingPassword.value
+)
+
+function resetPasswordForm() {
+  oldPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
+  passwordError.value = ''
+}
+
+async function savePassword() {
+  passwordError.value = ''
+  if (!canSavePassword.value) return
+  savingPassword.value = true
+  try {
+    await api.changePassword({
+      oldPassword: oldPassword.value,
+      newPassword: newPassword.value
+    })
+    resetPasswordForm()
+    // 服务端是无状态 JWT，旧令牌在过期前仍有效。主动清掉本地令牌并回登录页，
+    // 是本设备立即失效的最直接方式。见后端 UserService.changePassword 的说明。
+    auth.notify('ok', '密码已修改，请用新密码重新登录')
+    setTimeout(async () => {
+      await auth.logout()
+      location.hash = '#/login'
+    }, 1200)
+  } catch (e) {
+    passwordError.value = e.message
+  } finally {
+    savingPassword.value = false
+  }
+}
 
 /** 邮箱比对不区分大小写 —— 用户不该因为大小写被拦住 */
 const emailMatches = computed(() => {
@@ -85,7 +163,24 @@ async function doDelete() {
         <tbody>
           <tr>
             <td class="muted" style="width: 120px">昵称</td>
-            <td>{{ auth.user?.nickname || '—' }}</td>
+            <td>
+              <div class="inline-edit">
+                <input
+                  id="nickname"
+                  v-model="nickname"
+                  maxlength="50"
+                  autocomplete="nickname"
+                  @keyup.enter="saveNickname"
+                />
+                <button
+                  class="btn--sm"
+                  :disabled="!nicknameChanged || savingNickname"
+                  @click="saveNickname"
+                >
+                  {{ savingNickname ? '保存中…' : '保存' }}
+                </button>
+              </div>
+            </td>
           </tr>
           <tr>
             <td class="muted">邮箱</td>
@@ -97,6 +192,57 @@ async function doDelete() {
           </tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel__head">修改密码</div>
+    <div class="panel__body" style="padding-top: 0">
+      <div v-if="passwordError" class="alert alert--error" style="margin-bottom: 12px">
+        {{ passwordError }}
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="old-password">当前密码</label>
+        <input
+          id="old-password"
+          v-model="oldPassword"
+          type="password"
+          autocomplete="current-password"
+        />
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="new-password">新密码</label>
+        <input
+          id="new-password"
+          v-model="newPassword"
+          type="password"
+          autocomplete="new-password"
+        />
+        <div v-if="newPassword.length > 0 && !newPasswordValid" class="field__hint" style="color: var(--danger-text)">
+          密码长度需在 8-64 位之间
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="confirm-password">再输一次新密码</label>
+        <input
+          id="confirm-password"
+          v-model="confirmPassword"
+          type="password"
+          autocomplete="new-password"
+          @keyup.enter="savePassword"
+        />
+        <div v-if="confirmPassword.length > 0 && !confirmMatches" class="field__hint" style="color: var(--danger-text)">
+          两次输入不一致
+        </div>
+      </div>
+
+      <button :disabled="!canSavePassword" @click="savePassword">
+        {{ savingPassword ? '修改中…' : '修改密码' }}
+      </button>
+      <div class="field__hint" style="margin-top: 8px">修改成功后需要用新密码重新登录。</div>
     </div>
   </div>
 
@@ -155,3 +301,14 @@ async function doDelete() {
     </template>
   </div>
 </template>
+<style scoped>
+/* 昵称就地编辑：输入框 + 保存按钮同一行，宽度受控 */
+.inline-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.inline-edit input {
+  max-width: 260px;
+}
+</style>

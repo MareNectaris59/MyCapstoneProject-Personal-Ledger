@@ -17,11 +17,13 @@
  */
 import { ref, computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { formatMoney, isNegative, today, currentMonth, LEDGER_TYPE_LABEL } from '@/utils/format'
 
 const auth = useAuthStore()
+const router = useRouter()
 const { accounts } = storeToRefs(auth)
 
 /* ---------------- 概览数据 ---------------- */
@@ -161,6 +163,11 @@ async function removeAccount(account) {
   }
 }
 
+
+/** 跳到该科目的余额与变动明细页（FR-A-05）。 */
+function openDetail(a) {
+  router.push(`/subjects/${a.id}`)
+}
 onMounted(() => {
   loadOverview()
   runCheck()
@@ -254,7 +261,8 @@ onMounted(() => {
                 {{ formatMoney(a.balance) }}
               </td>
               <td class="right" style="white-space: nowrap">
-                <button class="btn--ghost btn--sm" @click="openOpening(a)">初始余额</button>
+                <button class="btn--ghost btn--sm" @click="openDetail(a)">明细</button>
+              <button class="btn--ghost btn--sm" @click="openOpening(a)">初始余额</button>
                 <button class="btn--ghost btn--sm" style="margin-left: 6px" @click="disableAccount(a)">
                   停用
                 </button>

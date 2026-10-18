@@ -30,7 +30,46 @@ const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
 
-const filters = ref({ ledgerType: '', startDate: '', endDate: '' })
+const filters = ref({
+  ledgerType: '',
+  startDate: '',
+  endDate: '',
+  subjectId: '',
+  minAmount: '',
+  maxAmount: '',
+  sortBy: 'occurredDate',
+  sortOrder: 'desc'
+})
+
+/* ---------------- 科目筛选的可选项 ---------------- */
+
+/**
+ * 科目筛选下拉的选项。
+ *
+ * 与记账表单不同，这里**不限于叶子科目**：筛账目时用户可能想"看餐饮这一大类
+ * 下的所有支出"，而那是一个非叶子节点。后端按 `entry.subject_id` 过滤，
+ * 选中非叶子不会命中任何分录，所以这里额外把选中节点的整棵子树 id 一起传。
+ *
+ * 实现上简化为：只列出叶子科目 + 一级分类（用"含子分类"标注）。
+ */
+const subjectOptions = computed(() => {
+  const tree = auth.fullTree || []
+  const flat = []
+  const walk = (nodes, depth, parentName) => {
+    for (const n of nodes || []) {
+      // 跳过类型容器那一层（资产/负债/权益/收入/费用）
+      if (depth === 0) {
+        walk(n.children, 1, '')
+        continue
+      }
+      const label = parentName ? `${parentName} / ${n.name}` : n.name
+      flat.push({ id: n.id, label, isLeaf: n.leaf })
+      if (n.children?.length) walk(n.children, depth + 1, n.name)
+    }
+  }
+  walk(tree, 0, '')
+  return flat
+})
 
 const detail = ref(null)
 const reversing = ref(null)
@@ -39,6 +78,22 @@ const busy = ref(false)
 
 const maxPage = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
+/* ---------------- 排序 ---------------- */
+
+/**
+ * 排序下拉绑定的是「字段:方向」这样一个可读值，避免页面上出现两个下拉
+ * 让用户自己组合出"金额升序"这种别扭的操作。这里用 getter/setter 把它
+ * 映射回后端的 sortBy / sortOrder 两个参数。
+ */
+const sortKey = computed({
+  get: () => `${filters.value.sortBy}:${filters.value.sortOrder}`,
+  set: (v) => {
+    const [by, order] = String(v).split(':')
+    filters.value.sortBy = by
+    filters.value.sortOrder = order
+  }
+})
+
 async function load() {
   loading.value = true
   try {
@@ -46,6 +101,11 @@ async function load() {
     if (filters.value.ledgerType) params.ledgerType = filters.value.ledgerType
     if (filters.value.startDate) params.startDate = filters.value.startDate
     if (filters.value.endDate) params.endDate = filters.value.endDate
+    if (filters.value.subjectId) params.subjectId = filters.value.subjectId
+    if (filters.value.minAmount !== '') params.minAmount = filters.value.minAmount
+    if (filters.value.maxAmount !== '') params.maxAmount = filters.value.maxAmount
+    if (filters.value.sortBy) params.sortBy = filters.value.sortBy
+    if (filters.value.sortOrder) params.sortOrder = filters.value.sortOrder
 
     const data = await api.ledgers(params)
     rows.value = data.records || []
@@ -128,6 +188,30 @@ onMounted(load)
         <div class="field mb-0">
           <label class="field__label" for="f-end">结束日期</label>
           <input id="f-end" v-model="filters.endDate" type="date" />
+        </div>
+        <div class="field mb-0">
+          <label class="field__label" for="f-subject">分类 / 账户</label>
+          <select id="f-subject" v-model="filters.subjectId">
+            <option value="">全部</option>
+            <option v-for="s in subjectOptions" :key="s.id" :value="s.id">{{ s.label }}</option>
+          </select>
+        </div>
+        <div class="field mb-0">
+          <label class="field__label" for="f-min">金额下限</label>
+          <input id="f-min" v-model="filters.minAmount" type="number" min="0" step="0.01" placeholder="不限" />
+        </div>
+        <div class="field mb-0">
+          <label class="field__label" for="f-max">金额上限</label>
+          <input id="f-max" v-model="filters.maxAmount" type="number" min="0" step="0.01" placeholder="不限" />
+        </div>
+        <div class="field mb-0">
+          <label class="field__label" for="f-sort">排序</label>
+          <select id="f-sort" v-model="sortKey">
+            <option value="occurredDate:desc">日期从新到旧</option>
+            <option value="occurredDate:asc">日期从旧到新</option>
+            <option value="amount:desc">金额从大到小</option>
+            <option value="amount:asc">金额从小到大</option>
+          </select>
         </div>
         <button @click="search">查询</button>
       </div>

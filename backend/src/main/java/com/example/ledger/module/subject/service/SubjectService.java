@@ -165,6 +165,9 @@ public class SubjectService {
         result.put("subjectId", s.getId());
         result.put("subjectName", s.getName());
         result.put("subjectType", typeName(s));
+        // 同时给出机器可读的类型码：前端要按类型决定"流入/流出"这类措辞，
+        // 比对中文字符串太脆（改个显示名就坏），比对枚举名才稳。
+        result.put("subjectTypeCode", s.getSubjectType() == null ? null : s.getSubjectType().name());
         result.put("signedSum", MoneyUtil.toPlainString(entryMapper.sumSignedAmountBySubject(subjectId)));
 
         AccountMeta meta = findAccountMeta(subjectId);

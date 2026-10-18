@@ -111,9 +111,59 @@ public class UserService {
         return issueTokens(user);
     }
 
+    /**
+     * 修改密码（FR-U-04）。
+     *
+     * <p>必须校验原密码 —— 否则任何拿到已登录会话的人都能改掉密码，
+     * 把账号主人锁在门外。与注销要求输入密码是同一个理由。
+     *
+     * <p><b>已知限制（如实记录）</b>：令牌是无状态 JWT，改密码后此前签发的
+     * accessToken 在过期前依然有效，服务端无法主动作废。彻底解决需要给用户表
+     * 增加 tokenVersion 并在校验时比对，属于另一个改动。当前做法是前端在改密
+     * 成功后立刻清除本地令牌并跳回登录页，让本设备立即失效；其他设备上的旧令牌
+     * 最多存活到过期（默认 2 小时）。对一个单用户本地记账应用，这个权衡是可接受的。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void changePassword(Long userId, AuthDtos.ChangePasswordRequest req) {
+        SysUser user = userMapper.selectById(userId);
+        if (user == null) {
+            throw BizException.of(ResultCode.USER_NOT_FOUND);
+        }
+        if (!passwordEncoder.matches(req.oldPassword(), user.getPasswordHash())) {
+            throw BizException.of(ResultCode.PASSWORD_ERROR);
+        }
+        if (req.oldPassword().equals(req.newPassword())) {
+            throw BizException.of(ResultCode.PARAM_INVALID, "新密码不能与原密码相同");
+        }
+        user.setPasswordHash(passwordEncoder.encode(req.newPassword()));
+        userMapper.updateById(user);
+        log.info("用户修改密码 userId={}", userId);
+    }
+
+    /**
+     * 修改资料（FR-U-03），目前只支持昵称。
+     *
+     * <p>昵称为空时回退到邮箱前缀，与注册时 {@code defaultNickname} 保持同一口径 ——
+     * 不允许把昵称清成空白，否则侧边栏会出现一个没有任何文字的角落。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public AuthDtos.UserInfo updateProfile(Long userId, AuthDtos.UpdateProfileRequest req) {
+        SysUser user = userMapper.selectById(userId);
+        if (user == null) {
+            throw BizException.of(ResultCode.USER_NOT_FOUND);
+        }
+        if (req.nickname() == null || req.nickname().isBlank()) {
+            throw BizException.of(ResultCode.PARAM_INVALID, "昵称不能为空");
+        }
+        user.setNickname(req.nickname().trim());
+        userMapper.updateById(user);
+        UserProfile profile = profileMapper.selectOne(new LambdaQueryWrapper<UserProfile>()
+                .eq(UserProfile::getUserId, userId));
+        return toUserInfo(user, profile);
+    }
+
     /** 刷新访问令牌。 */
-    public AuthDtos.LoginResponse refresh(String refreshToken) {
-        var current = jwtTokenProvider.parseRefreshToken(refreshToken);
+    public AuthDtos.LoginResponse refresh(String refreshToken) {        var current = jwtTokenProvider.parseRefreshToken(refreshToken);
         SysUser user = userMapper.selectById(current.userId());
         if (user == null) {
             throw BizException.of(ResultCode.USER_NOT_FOUND);

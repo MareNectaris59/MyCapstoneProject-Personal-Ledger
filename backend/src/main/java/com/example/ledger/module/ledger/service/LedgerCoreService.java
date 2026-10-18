@@ -329,17 +329,50 @@ public class LedgerCoreService {
         return LedgerDetail.of(ledger, entries, subjectIndex(userId, entries));
     }
 
-    /** 账目分页查询。 */
+    /**
+     * 账目分页查询（FR-Q-01 组合查询 + FR-Q-02 分页与排序）。
+     *
+     * 支持组合：时间范围 × 收支类型 × 科目 × 金额范围，并可指定排序。
+     *
+     * 科目筛选用子查询而非 join：一张凭证有多条分录，与 entry join 会让同一凭证
+     * 按分录数重复出现，还得再去重。`id IN (SELECT ledger_id ...)` 的语义直接就是
+     * "涉及该科目的凭证"，不会放大行数。
+     *
+     * `{0}` 是 MyBatis 占位符，走预编译参数绑定，不是字符串拼接。
+     * 排序字段走白名单（只有 amount / occurredDate），不把用户输入拼进 ORDER BY。
+     */
     @Transactional(readOnly = true)
     public IPage<Ledger> page(Long userId, long pageNo, long pageSize,
-                             LocalDate startDate, LocalDate endDate, LedgerType ledgerType) {
+                              LocalDate startDate, LocalDate endDate, LedgerType ledgerType,
+                              Long subjectId, java.math.BigDecimal minAmount,
+                              java.math.BigDecimal maxAmount,
+                              String sortBy, String sortOrder) {
+        if (minAmount != null && maxAmount != null && minAmount.compareTo(maxAmount) > 0) {
+            throw com.example.ledger.common.exception.BizException.of(
+                    com.example.ledger.common.result.ResultCode.PARAM_INVALID,
+                    "最小金额不能大于最大金额");
+        }
+
         LambdaQueryWrapper<Ledger> qw = new LambdaQueryWrapper<Ledger>()
                 .eq(Ledger::getUserId, userId)
                 .ge(startDate != null, Ledger::getOccurredDate, startDate)
                 .le(endDate != null, Ledger::getOccurredDate, endDate)
                 .eq(ledgerType != null, Ledger::getLedgerType, ledgerType)
-                .orderByDesc(Ledger::getOccurredDate)
-                .orderByDesc(Ledger::getId);
+                .ge(minAmount != null, Ledger::getAmount, minAmount)
+                .le(maxAmount != null, Ledger::getAmount, maxAmount);
+
+        if (subjectId != null) {
+            qw.apply("id IN (SELECT ledger_id FROM entry WHERE subject_id = {0})", subjectId);
+        }
+
+        boolean asc = "asc".equalsIgnoreCase(sortOrder);
+        if ("amount".equalsIgnoreCase(sortBy)) {
+            // 金额相同时按 id 兜底，避免翻页出现某条重复出现 / 某条被跳过
+            qw.orderBy(true, asc, Ledger::getAmount).orderByDesc(Ledger::getId);
+        } else {
+            qw.orderBy(true, asc, Ledger::getOccurredDate)
+              .orderBy(true, asc, Ledger::getId);
+        }
         return ledgerMapper.selectPage(new Page<>(pageNo, pageSize), qw);
     }
 

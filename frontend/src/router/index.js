@@ -35,6 +35,12 @@ const routes = [
     meta: { title: '账目' }
   },
   {
+    path: '/subjects/:id(\\d+)',
+    name: 'subject-detail',
+    component: () => import('@/views/SubjectDetailView.vue'),
+    meta: { title: '科目明细' }
+  },
+  {
     path: '/categories',
     name: 'categories',
     component: () => import('@/views/CategoryView.vue'),

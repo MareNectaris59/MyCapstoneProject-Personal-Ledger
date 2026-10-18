@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -74,8 +75,14 @@ public class LedgerController {
                                           @RequestParam(defaultValue = "20") long size,
                                           @RequestParam(required = false) LocalDate startDate,
                                           @RequestParam(required = false) LocalDate endDate,
-                                          @RequestParam(required = false) LedgerType ledgerType) {
-        IPage<Ledger> result = ledgerCoreService.page(user.userId(), page, size, startDate, endDate, ledgerType);
+                                          @RequestParam(required = false) LedgerType ledgerType,
+                                          @RequestParam(required = false) Long subjectId,
+                                          @RequestParam(required = false) BigDecimal minAmount,
+                                          @RequestParam(required = false) BigDecimal maxAmount,
+                                          @RequestParam(required = false) String sortBy,
+                                          @RequestParam(required = false) String sortOrder) {
+        IPage<Ledger> result = ledgerCoreService.page(user.userId(), page, size,
+                startDate, endDate, ledgerType, subjectId, minAmount, maxAmount, sortBy, sortOrder);
         return Result.success(PageResult.of(result));
     }
 

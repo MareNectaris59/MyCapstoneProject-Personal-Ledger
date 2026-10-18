@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -134,6 +135,30 @@ public class AuthController {
      * 接入 SMTP 后应在此处调用 MailService，并把验证码写入
      * Redis 键 {@code auth:code:{scene}:{email}}，TTL 5 分钟。
      */
+    /**
+     * 修改密码（FR-U-04）。需校验原密码。
+     *
+     * <p>成功后前端会清除本地令牌并跳回登录页。服务端是无状态 JWT，
+     * 旧令牌在过期前仍然有效 —— 这是已知限制，见 UserService.changePassword 的说明。
+     */
+    @PutMapping("/password")
+    public Result<Void> changePassword(@AuthenticationPrincipal CurrentUser user,
+                                       @Valid @RequestBody AuthDtos.ChangePasswordRequest req) {
+        userService.changePassword(user.userId(), req);
+        return Result.success(null);
+    }
+
+    /**
+     * 修改资料（FR-U-03），目前只支持昵称。
+     *
+     * <p>返回更新后的用户信息，前端可直接用它刷新侧边栏，无需再调 /auth/me。
+     */
+    @PutMapping("/profile")
+    public Result<AuthDtos.UserInfo> updateProfile(@AuthenticationPrincipal CurrentUser user,
+                                                   @Valid @RequestBody AuthDtos.UpdateProfileRequest req) {
+        return Result.success(userService.updateProfile(user.userId(), req));
+    }
+
     @PostMapping("/code")
     public Result<String> sendCode(@Valid @RequestBody AuthDtos.SendCodeRequest req) {
         return Result.success("邮件服务尚未接入，暂不发送验证码，可直接注册");

@@ -118,4 +118,40 @@ public final class AuthDtos {
             String message
     ) {
     }
+
+    /**
+     * 修改密码请求（FR-U-04）。
+     *
+     * <p>必须校验原密码：否则任何拿到已登录会话的人都能改掉密码，
+     * 把真正的账号主人锁在门外。这与注销要求输入密码是同一个理由。
+     *
+     * <p>新密码的长度限制与注册保持一致（8-64），避免出现"注册时不合法、
+     * 改密码时却可以"的不一致。
+     */
+    public record ChangePasswordRequest(
+            @NotBlank(message = "请输入原密码")
+            String oldPassword,
+
+            @NotBlank(message = "请输入新密码")
+            @Size(min = 8, max = 64, message = "密码长度需在 8-64 位之间")
+            String newPassword
+    ) {
+    }
+
+    /**
+     * 修改资料请求（FR-U-03）。
+     *
+     * <p>目前只支持昵称。<b>头像与"默认账本"不做</b>，理由是这两个字段在本系统里
+     * 没有消费方：
+     * <ul>
+     *   <li>界面任何位置都不展示头像，上传后用户永远看不到自己设置的结果</li>
+     *   <li>系统是单账本设计（一个用户一棵科目树），不存在"默认账本"可选项</li>
+     * </ul>
+     * 需要展示位时再加，比先存一个永远不显示的头像更诚实。
+     */
+    public record UpdateProfileRequest(
+            @Size(max = 50, message = "昵称不能超过 50 字")
+            String nickname
+    ) {
+    }
 }

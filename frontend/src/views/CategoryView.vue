@@ -19,10 +19,12 @@
  *    前端不该改成含糊的"操作失败"。
  */
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
+const router = useRouter()
 
 const showForm = ref(false)
 const busy = ref(false)
@@ -149,6 +151,11 @@ async function remove(node) {
   }
 }
 
+
+/** 跳到该科目的余额与变动明细页（FR-A-05）。 */
+function openDetail(node) {
+  router.push(`/subjects/${node.id}`)
+}
 onMounted(() => auth.loadSubjects())
 </script>
 
@@ -246,6 +253,7 @@ onMounted(() => auth.loadSubjects())
               <button class="btn--ghost btn--sm" @click="cancelRename">取消</button>
             </template>
             <template v-else>
+              <button class="btn--ghost btn--sm" @click="openDetail(node)">明细</button>
               <button class="btn--ghost btn--sm" @click="startRename(node)">改名</button>
               <button class="btn--ghost btn--sm" @click="toggle(node)">
                 {{ node.enabled ? '停用' : '启用' }}
