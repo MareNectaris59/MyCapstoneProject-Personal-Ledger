@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,6 +30,7 @@ import java.util.Map;
 /**
  * 科目与账户接口（《系统设计说明书》§6.2.3）。
  */
+@Validated
 @RestController
 @RequestMapping("/api/v1/subjects")
 public class SubjectController {
@@ -69,7 +71,10 @@ public class SubjectController {
     @GetMapping("/{id:\\d+}/entries")
     public Result<List<Map<String, Object>>> entries(@AuthenticationPrincipal CurrentUser user,
                                                      @PathVariable Long id,
-                                                     @RequestParam(defaultValue = "50") int limit) {
+                                                     @RequestParam(defaultValue = "50")
+                                                @jakarta.validation.constraints.Min(value = 1, message = "条数至少为 1")
+                                                @jakarta.validation.constraints.Max(value = 200, message = "条数最多 200")
+                                                int limit) {
         return Result.success(subjectService.accountEntries(user.userId(), id, limit));
     }
 

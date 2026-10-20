@@ -117,11 +117,10 @@ public class UserService {
      * <p>必须校验原密码 —— 否则任何拿到已登录会话的人都能改掉密码，
      * 把账号主人锁在门外。与注销要求输入密码是同一个理由。
      *
-     * <p><b>已知限制（如实记录）</b>：令牌是无状态 JWT，改密码后此前签发的
-     * accessToken 在过期前依然有效，服务端无法主动作废。彻底解决需要给用户表
-     * 增加 tokenVersion 并在校验时比对，属于另一个改动。当前做法是前端在改密
-     * 成功后立刻清除本地令牌并跳回登录页，让本设备立即失效；其他设备上的旧令牌
-     * 最多存活到过期（默认 2 小时）。对一个单用户本地记账应用，这个权衡是可接受的。
+     * <p><b>改密即踢下线</b>：成功后会自增 {@code token_version}，
+     * 此前签发的所有 accessToken / refreshToken 立刻失效 —— 过滤器每次校验
+     * 都会把令牌里的 {@code tv} 声明与库里的值比对，不一致直接拒绝。
+     * 因此其他设备上的旧令牌不会苟活到自然过期。
      */
     @Transactional(rollbackFor = Exception.class)
     public void changePassword(Long userId, AuthDtos.ChangePasswordRequest req) {
@@ -136,8 +135,11 @@ public class UserService {
             throw BizException.of(ResultCode.PARAM_INVALID, "新密码不能与原密码相同");
         }
         user.setPasswordHash(passwordEncoder.encode(req.newPassword()));
+        // 自增令牌版本：此前签发的所有令牌立刻失效，下次请求即被过滤器拒绝。
+        // 这让"改密 = 把其他设备踢下线"真正成立，而不只是清掉本机 localStorage。
+        user.setTokenVersion((user.getTokenVersion() == null ? 0 : user.getTokenVersion()) + 1);
         userMapper.updateById(user);
-        log.info("用户修改密码 userId={}", userId);
+        log.info("用户修改密码 userId={} 令牌版本已提升", userId);
     }
 
     /**
@@ -187,8 +189,10 @@ public class UserService {
     }
 
     private AuthDtos.LoginResponse issueTokens(SysUser user) {
-        String access = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail());
-        String refresh = jwtTokenProvider.createRefreshToken(user.getId(), user.getEmail());
+        // 令牌版本号随令牌签发，过滤器每次校验时与库里比对（见 JwtAuthenticationFilter）
+        int tokenVersion = user.getTokenVersion() == null ? 0 : user.getTokenVersion();
+        String access = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail(), tokenVersion);
+        String refresh = jwtTokenProvider.createRefreshToken(user.getId(), user.getEmail(), tokenVersion);
         UserProfile profile = profileMapper.selectOne(new LambdaQueryWrapper<UserProfile>()
                 .eq(UserProfile::getUserId, user.getId()));
         return new AuthDtos.LoginResponse(access, refresh,

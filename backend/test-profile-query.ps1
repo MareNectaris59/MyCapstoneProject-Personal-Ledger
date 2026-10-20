@@ -185,6 +185,14 @@ $newLogin = Call POST '/api/v1/auth/login' (,@{
 }) $null
 Check 'new password works' $newLogin.code 0
 
+# token_version was bumped, so every previously issued token must stop working.
+$staleToken = Call GET '/api/v1/auth/me' $null $token
+Check 'old token rejected with 401 after password change' $staleToken.http 401
+
+# Switch to the fresh token: keeping the stale one would fail the rest of this suite.
+$token = $newLogin.data.accessToken
+Check 'new token works' (Call GET '/api/v1/auth/me' $null $token).code 0
+
 # ------------------------------------------------------------------ FR-U-03
 Write-Host ''
 Write-Host '=== FR-U-03 change nickname ===' -ForegroundColor Cyan
@@ -294,6 +302,40 @@ Check 'foreign subject balance refused' ($foreignBalance.code -ne 0) $true
 Check 'foreign subject balance -> 1301' $foreignBalance.code 1301
 $foreignMoves = Call GET "/api/v1/subjects/$($fx.lunchId)/entries" $null $other.token
 Check 'foreign subject movements refused' ($foreignMoves.code -ne 0) $true
+
+# ------------------------------------------------------------------ hardening
+Write-Host ''
+Write-Host '=== login rate limit and parameter bounds ===' -ForegroundColor Cyan
+
+# Use a dedicated email: the limiter keys on (email + IP), so the fixture stays unlocked.
+$lockStamp = Get-Date -Format 'HHmmssfff'
+$lockEmail = "lock$lockStamp@example.com"
+$lastCode = $null
+for ($attempt = 1; $attempt -le 5; $attempt++) {
+    $lastCode = (Call POST '/api/v1/auth/login' (,@{
+        email = $lockEmail; password = 'definitely-wrong'
+    }) $null).code
+}
+Check 'first 5 failed logins report PASSWORD_ERROR' $lastCode 1203
+
+$blocked = Call POST '/api/v1/auth/login' (,@{
+    email = $lockEmail; password = 'definitely-wrong'
+}) $null
+Check '6th attempt blocked by the rate limiter' $blocked.code 1204
+
+# The limiter runs BEFORE password verification, so even a correct password waits.
+$blockedEvenCorrect = Call POST '/api/v1/auth/login' (,@{
+    email = $lockEmail; password = 'whatever'
+}) $null
+Check 'rate limit applies before the password check' $blockedEvenCorrect.code 1204
+
+Write-Host ''
+Write-Host '=== pagination bounds ===' -ForegroundColor Cyan
+Check 'size above 200 rejected' (Call GET '/api/v1/ledgers?page=1&size=201' $null $token).code 1101
+Check 'page zero rejected' (Call GET '/api/v1/ledgers?page=0&size=10' $null $token).code 1101
+Check 'size at the limit is accepted' (Call GET '/api/v1/ledgers?page=1&size=200' $null $token).code 0
+Check 'negative page rejected' (Call GET '/api/v1/ledgers?page=-1' $null $token).code 1101
+Check 'subject entries limit above 200 rejected' (Call GET "/api/v1/subjects/$($fx.lunchId)/entries?limit=201" $null $token).code 1101
 
 # ------------------------------------------------------------------ summary
 Write-Host ''

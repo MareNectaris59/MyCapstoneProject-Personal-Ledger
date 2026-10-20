@@ -64,6 +64,15 @@ public class SysUser {
     @TableField(select = false)
     private LocalDateTime deletedAt;
 
+    /**
+     * 令牌版本号。
+     *
+     * <p>签进 JWT 的 {@code tv} 声明，过滤器每次校验时与库里比对。
+     * 修改密码时自增 —— 此前签发的所有令牌立刻失效，无需等它们自然过期。
+     * 这是无状态 JWT 下实现"改密即踢下线"的最小代价方案。
+     */
+    private Integer tokenVersion;
+
     public boolean isActive() {
         return "ACTIVE".equals(status);
     }

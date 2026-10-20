@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
@@ -50,6 +51,23 @@ public class GlobalExceptionHandler {
                 .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         log.warn("参数校验失败 traceId={} detail={}", TraceIdHolder.current(), detail);
+        return Result.failure(ResultCode.PARAM_INVALID.getCode(), detail);
+    }
+
+    /**
+     * @RequestParam / @PathVariable 上的约束校验失败（方法参数级 @Validated）。
+     *
+     * <p>与上面的请求体校验是两套机制：{@code @Valid @RequestBody} 抛
+     * MethodArgumentNotValidException，而 {@code @Validated} 加在类上时，
+     * 参数上的 {@code @Min/@Max} 由方法校验代理抛 ConstraintViolationException。
+     * 两者都要映射到 1101，否则分页越界会落进兜底 500。
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public Result<Void> handleConstraintViolation(ConstraintViolationException ex) {
+        String detail = ex.getConstraintViolations().stream()
+                .map(v -> String.valueOf(v.getMessage()))
+                .collect(Collectors.joining("; "));
+        log.warn("参数越界 traceId={} detail={}", TraceIdHolder.current(), detail);
         return Result.failure(ResultCode.PARAM_INVALID.getCode(), detail);
     }
 

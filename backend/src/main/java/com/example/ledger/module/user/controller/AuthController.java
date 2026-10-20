@@ -6,6 +6,7 @@ import com.example.ledger.common.result.ResultCode;
 import com.example.ledger.module.user.dto.AuthDtos;
 import com.example.ledger.module.user.service.UserService;
 import com.example.ledger.security.CurrentUser;
+import com.example.ledger.security.LoginAttemptGuard;
 import com.example.ledger.security.JwtTokenProvider;
 import com.example.ledger.security.TokenBlacklistService;
 import jakarta.validation.Valid;
@@ -30,11 +31,14 @@ public class AuthController {
     private final UserService userService;
     private final JwtTokenProvider jwtTokenProvider;
     private final TokenBlacklistService tokenBlacklistService;
+    private final LoginAttemptGuard loginAttemptGuard;
 
     public AuthController(UserService userService,
+                          LoginAttemptGuard loginAttemptGuard,
                           JwtTokenProvider jwtTokenProvider,
                           TokenBlacklistService tokenBlacklistService) {
         this.userService = userService;
+        this.loginAttemptGuard = loginAttemptGuard;
         this.jwtTokenProvider = jwtTokenProvider;
         this.tokenBlacklistService = tokenBlacklistService;
     }
@@ -47,8 +51,46 @@ public class AuthController {
 
     /** 登录 */
     @PostMapping("/login")
-    public Result<AuthDtos.LoginResponse> login(@Valid @RequestBody AuthDtos.LoginRequest req) {
-        return Result.success(userService.login(req));
+    public Result<AuthDtos.LoginResponse> login(@Valid @RequestBody AuthDtos.LoginRequest req,
+                                                jakarta.servlet.http.HttpServletRequest httpRequest) {
+        // 防暴力破解：同一「邮箱 + 客户端 IP」在窗口内失败超限就直接拒绝，
+        // 不再进入密码校验（也顺带省掉一次 BCrypt 的开销）。
+        String attemptKey = loginAttemptGuard.key(req.email(), clientIp(httpRequest));
+        loginAttemptGuard.assertNotBlocked(attemptKey);
+        try {
+            AuthDtos.LoginResponse response = userService.login(req);
+            // 登录成功说明不是爆破，清空计数
+            loginAttemptGuard.reset(attemptKey);
+            return Result.success(response);
+        } catch (BizException ex) {
+            // 只对"密码错误"计数。账号被停用之类的失败不该累加，
+            // 否则用户在合法状态下也会莫名被锁。
+            if (ex.getResultCode() == ResultCode.PASSWORD_ERROR) {
+                loginAttemptGuard.recordFailure(attemptKey);
+            }
+            throw ex;
+        }
+    }
+
+    /**
+     * 取客户端 IP。
+     *
+     * <p>优先读 {@code X-Forwarded-For} 的第一段（反向代理场景），
+     * 否则用 {@code getRemoteAddr()}。注意这个头可以被伪造 ——
+     * 限流在这里只是提高攻击成本，不承担"可信身份"的职责；
+     * 真正的身份判定仍然靠密码与令牌。
+     */
+    private static String clientIp(jakarta.servlet.http.HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            int comma = forwarded.indexOf(',');
+            return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+        return request.getRemoteAddr();
     }
 
     /** 刷新访问令牌 */

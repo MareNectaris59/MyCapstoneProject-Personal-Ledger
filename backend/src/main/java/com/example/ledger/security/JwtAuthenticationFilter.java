@@ -16,6 +16,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.example.ledger.module.user.entity.SysUser;
+import com.example.ledger.module.user.mapper.SysUserMapper;
 import java.io.IOException;
 
 /**
@@ -36,11 +38,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final TokenBlacklistService tokenBlacklistService;
+    private final SysUserMapper userMapper;
 
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
-                                   TokenBlacklistService tokenBlacklistService) {
+                                   TokenBlacklistService tokenBlacklistService,
+                         SysUserMapper userMapper) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.tokenBlacklistService = tokenBlacklistService;
+        this.userMapper = userMapper;
     }
 
     @Override
@@ -51,6 +56,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (token != null && !tokenBlacklistService.isBlacklisted(token)) {
             try {
                 CurrentUser user = jwtTokenProvider.parseAccessToken(token);
+
+                // 令牌版本校验：改密后 token_version 自增，旧令牌的 tv 声明落后即失效。
+                // 无状态 JWT 无法主动作废，这是"改密即踢下线"的最小代价方案。
+                // 代价是每个带令牌的请求多一次按主键查询 —— 对单用户应用可接受。
+                if (!tokenVersionMatches(user)) {
+                    log.warn("令牌版本已过期（可能修改过密码），拒绝 method={} uri={}",
+                            request.getMethod(), request.getRequestURI());
+                    request.setAttribute("jwt.error.code", ResultCode.TOKEN_INVALID.name());
+                    request.setAttribute("jwt.error.message", "登录状态已失效，请重新登录");
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
                 UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
                         user, null, AuthorityUtils.NO_AUTHORITIES);
                 auth.setDetails(token);
@@ -76,6 +95,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             log.debug("请求未携带 Bearer 令牌 method={} uri={}", request.getMethod(), request.getRequestURI());
         }
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * 令牌里的版本号是否与库里一致。
+     *
+     * <p>用户不存在（已注销）或版本不一致都返回 false —— 两者对"这个令牌还能不能用"
+     * 的答案是相同的：不能。不区分，避免把"账号是否存在"暴露给持有旧令牌的人。
+     */
+    private boolean tokenVersionMatches(CurrentUser tokenUser) {
+        SysUser current = userMapper.selectById(tokenUser.userId());
+        if (current == null) {
+            return false;
+        }
+        int expected = current.getTokenVersion() == null ? 0 : current.getTokenVersion();
+        return expected == tokenUser.tokenVersion();
     }
 
     private String resolveToken(HttpServletRequest request) {

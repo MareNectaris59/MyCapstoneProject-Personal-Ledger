@@ -11,6 +11,7 @@ import com.example.ledger.module.ledger.service.LedgerCoreService;
 import com.example.ledger.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -31,6 +34,7 @@ import java.util.Map;
  * <p>注意这里<b>没有 DELETE 接口</b>：物理删除在架构上被禁止，
  * 纠错只能通过冲正。这不是遗漏，是设计。
  */
+@Validated
 @RestController
 @RequestMapping("/api/v1/ledgers")
 public class LedgerController {
@@ -71,8 +75,13 @@ public class LedgerController {
     /** 账目分页查询 */
     @GetMapping
     public Result<PageResult<Ledger>> page(@AuthenticationPrincipal CurrentUser user,
-                                          @RequestParam(defaultValue = "1") long page,
-                                          @RequestParam(defaultValue = "20") long size,
+                                          @RequestParam(defaultValue = "1")
+                                          @Min(value = 1, message = "页码至少为 1")
+                                          long page,
+                                          @RequestParam(defaultValue = "20")
+                                          @Min(value = 1, message = "每页条数至少为 1")
+                                          @Max(value = 200, message = "每页条数最多 200")
+                                          long size,
                                           @RequestParam(required = false) LocalDate startDate,
                                           @RequestParam(required = false) LocalDate endDate,
                                           @RequestParam(required = false) LedgerType ledgerType,

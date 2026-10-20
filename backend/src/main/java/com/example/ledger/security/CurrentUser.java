@@ -11,5 +11,5 @@ package com.example.ledger.security;
  * <p>越权防护的关键约定：所有涉及资源的查询都必须使用这里的 {@code userId}，
  * <b>禁止从请求参数取 userId</b>（《系统设计说明书》§8.1）。
  */
-public record CurrentUser(Long userId, String email) {
+public record CurrentUser(Long userId, String email, int tokenVersion) {
 }

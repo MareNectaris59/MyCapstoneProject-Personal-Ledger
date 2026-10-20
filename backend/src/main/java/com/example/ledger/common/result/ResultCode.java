@@ -36,6 +36,13 @@ public enum ResultCode {
     EMAIL_EXISTS(1201, "该邮箱已被注册"),
     USER_NOT_FOUND(1202, "用户不存在"),
     PASSWORD_ERROR(1203, "邮箱或密码错误"),
+
+    /**
+     * 操作过于频繁（登录失败次数超限）。
+     *
+     * <p>与 1101 参数错误区分开：前端要据此显示"稍后再试"而不是"输入有误"。
+     */
+    TOO_MANY_REQUESTS(1204, "尝试次数过多，请稍后再试"),
     CODE_INVALID(1204, "验证码不正确"),
     CODE_EXPIRED(1205, "验证码已过期"),
     CODE_SEND_TOO_FREQUENT(1206, "验证码发送过于频繁，请稍后再试"),

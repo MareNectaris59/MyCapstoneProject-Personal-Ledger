@@ -36,6 +36,9 @@ public class JwtTokenProvider {
     private static final Logger log = LoggerFactory.getLogger(JwtTokenProvider.class);
 
     private static final String CLAIM_TYPE = "typ";
+
+    /** 令牌版本号声明。与 sys_user.token_version 比对，改密后旧令牌即失效。 */
+    private static final String CLAIM_TOKEN_VERSION = "tv";
     private static final String TYPE_ACCESS = "access";
     private static final String TYPE_REFRESH = "refresh";
 
@@ -58,21 +61,22 @@ public class JwtTokenProvider {
     }
 
     /** 签发访问令牌。 */
-    public String createAccessToken(Long userId, String email) {
-        return create(userId, email, TYPE_ACCESS, accessTokenSeconds);
+    public String createAccessToken(Long userId, String email, int tokenVersion) {
+        return create(userId, email, tokenVersion, TYPE_ACCESS, accessTokenSeconds);
     }
 
     /** 签发刷新令牌。 */
-    public String createRefreshToken(Long userId, String email) {
-        return create(userId, email, TYPE_REFRESH, refreshTokenSeconds);
+    public String createRefreshToken(Long userId, String email, int tokenVersion) {
+        return create(userId, email, tokenVersion, TYPE_REFRESH, refreshTokenSeconds);
     }
 
-    private String create(Long userId, String email, String type, long ttlSeconds) {
+    private String create(Long userId, String email, int tokenVersion, String type, long ttlSeconds) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(userId))
                 .claim("email", email)
+                .claim(CLAIM_TOKEN_VERSION, tokenVersion)
                 .claim(CLAIM_TYPE, type)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(ttlSeconds)))
@@ -103,7 +107,9 @@ public class JwtTokenProvider {
     }
 
     private CurrentUser toCurrentUser(Claims claims) {
-        return new CurrentUser(Long.valueOf(claims.getSubject()), claims.get("email", String.class));
+        Integer tv = claims.get(CLAIM_TOKEN_VERSION, Integer.class);
+        return new CurrentUser(Long.valueOf(claims.getSubject()),
+                claims.get("email", String.class), tv == null ? 0 : tv);
     }
 
     private Claims parse(String token) {
