@@ -385,6 +385,27 @@ Check 'blank keyword behaves like no filter' $blankFilter.data.total $noFilter.d
 $tooLong = Call GET ("/api/v1/ledgers?page=1&size=50&keyword=" + ('a' * 51)) $null $token
 Check 'keyword over 50 chars rejected' $tooLong.code 1101
 
+# ------------------------------------------------------------------ daily aggregation
+# The calendar heatmap consumes analysis/trend with granularity=DAY. Two properties
+# must hold or the chart lies: same-day expenses merge into one cell, and days with
+# no records are omitted (filling them with 0 would flatten the colour scale).
+Write-Host ''
+Write-Host '=== daily aggregation (heatmap contract) ===' -ForegroundColor Cyan
+
+# The keyword section above booked 3 x 11.00 on 2026-10-20, so one day must merge.
+$dayOne = Call GET '/api/v1/analysis/trend?granularity=DAY&startDate=2026-10-20&endDate=2026-10-20' $null $token
+Check 'DAY granularity code' $dayOne.code 0
+Check 'same-day expenses merge into one point' (@($dayOne.data.points).Count) 1
+Check 'merged daily amount is 3 x 11.00' $dayOne.data.points[0].amount '33.00'
+Check 'daily point period is an ISO date' $dayOne.data.points[0].period '2026-10-20'
+
+# A whole-month window must NOT invent zero points for the other 30 days.
+$monthDays = Call GET '/api/v1/analysis/trend?granularity=DAY&startDate=2026-10-01&endDate=2026-10-31' $null $token
+Check-True 'empty days are omitted, not zero-filled' (@($monthDays.data.points).Count -lt 31)
+$allNonZero = $true
+foreach ($pt in @($monthDays.data.points)) { if ([double]$pt.amount -le 0) { $allNonZero = $false } }
+Check-True 'no zero-amount points are returned' $allNonZero
+
 # ------------------------------------------------------------------ summary
 Write-Host ''
 Write-Host ('=' * 62)

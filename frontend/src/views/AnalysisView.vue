@@ -18,9 +18,10 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import * as echarts from 'echarts/core'
-import { LineChart, PieChart, BarChart } from 'echarts/charts'
+import { LineChart, PieChart, BarChart, HeatmapChart } from 'echarts/charts'
 import {
-  GridComponent, TooltipComponent, LegendComponent, TitleComponent
+  GridComponent, TooltipComponent, LegendComponent, TitleComponent,
+  CalendarComponent, VisualMapComponent
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { api } from '@/api'
@@ -28,8 +29,9 @@ import { useAuthStore } from '@/stores/auth'
 import { formatMoney, today, currentMonth } from '@/utils/format'
 
 echarts.use([
-  LineChart, PieChart, BarChart,
+  LineChart, PieChart, BarChart, HeatmapChart,
   GridComponent, TooltipComponent, LegendComponent, TitleComponent,
+  CalendarComponent, VisualMapComponent,
   CanvasRenderer
 ])
 
@@ -76,6 +78,8 @@ function rangeOf(key) {
 const overview = ref(null)
 const shares = ref([])
 const trendPoints = ref([])
+// 每日支出，供日历热力图使用（DAY 粒度）
+const dailyPoints = ref([])
 const compare = ref(null)
 const contribution = ref(null)
 const loading = ref(false)
@@ -92,7 +96,7 @@ async function load() {
   chartError.value = ''
   const { startDate, endDate } = range.value
   try {
-    const [ov, share, trend, cmp, contrib] = await Promise.all([
+    const [ov, share, trend, daily, cmp, contrib] = await Promise.all([
       api.analysisOverview({ startDate, endDate }),
       api.analysisCategoryShare({ startDate, endDate, level: 1 }),
       api.analysisTrend({
@@ -100,12 +104,19 @@ async function load() {
         startDate: rangeOf('thisYear').startDate,
         endDate
       }),
+      // 日历热力图要的是每天一笔，与上面的月度折线互不影响
+      api.analysisTrend({
+        granularity: 'DAY',
+        startDate: rangeOf('thisYear').startDate,
+        endDate: today()
+      }),
       api.analysisCompare({ granularity: 'MONTH', period: currentMonth(), alignWindow: true }),
       api.analysisContribution({ granularity: 'MONTH', period: currentMonth() })
     ])
     overview.value = ov
     shares.value = share.items || []
     trendPoints.value = trend.points || []
+    dailyPoints.value = daily.points || []
     compare.value = cmp
     contribution.value = contrib
     await nextTick()
@@ -122,10 +133,12 @@ const pieRef = ref(null)
 const lineRef = ref(null)
 const barRef = ref(null)
 const contribRef = ref(null)
+const calendarRef = ref(null)
 let pieChart = null
 let lineChart = null
 let barChart = null
 let contribChart = null
+let calendarChart = null
 
 const AXIS = '#64748b'
 const GRID_LINE = 'rgba(15,23,42,0.08)'
@@ -269,11 +282,78 @@ function renderCompare() {
   }, true)
 }
 
+/**
+ * 消费日历热力图。
+ *
+ * 为什么要有这一张：现有的月度折线只能看出"这个月花得多"，
+ * 看不出"这个月是哪几天失控了"。日历热力图把每一天铺开，
+ * 连续几天深色就是一段集中消费，一眼可见。
+ *
+ * 数据用 DAY 粒度的趋势接口（后端已支持），它**只返回有数据的日期**，
+ * 空白天在图上就是没有色块 —— 这正是我们想要的，
+ * 不需要为"没记账的日子"补 0（补 0 反而会把色阶压低）。
+ */
+function renderCalendar() {
+  if (!calendarRef.value) return
+  calendarChart = calendarChart || echarts.init(calendarRef.value)
+
+  const year = String(new Date().getFullYear())
+  const data = dailyPoints.value.map((p) => [p.period, parseFloat(p.amount) || 0])
+  const maxAmount = data.reduce((m, item) => Math.max(m, item[1]), 0)
+
+  calendarChart.setOption({
+    ...baseOption(),
+    tooltip: {
+      trigger: 'item',
+      formatter: (p) => `${p.value[0]}<br/>${formatMoney(p.value[1])}`
+    },
+    visualMap: {
+      // 一档色阶就够：浅到深表示金额大小，不引入第二种色相，
+      // 免得和页面上别处的绿色/红色语义打架
+      min: 0,
+      max: maxAmount || 1,
+      calculable: false,
+      orient: 'horizontal',
+      left: 'center',
+      bottom: 0,
+      itemWidth: 12,
+      itemHeight: 90,
+      textStyle: { color: AXIS, fontSize: 11 },
+      inRange: {
+        color: ['#e8f4fd', '#c3e4f8', '#8fcaf2', '#4fa3e3', '#1a8cff', '#0b5fb0']
+      }
+    },
+    calendar: {
+      top: 44,
+      left: 56,
+      right: 16,
+      cellSize: ['auto', 13],
+      range: year,
+      splitLine: { show: false },
+      // 12 个月纵向堆叠时星期标签会重复 12 次，是噪音，只留月份名
+      dayLabel: { show: false },
+      monthLabel: { color: AXIS, fontSize: 11 },
+      yearLabel: { show: false },
+      itemStyle: {
+        color: '#f6fcff',
+        borderWidth: 1,
+        borderColor: '#ffffff'
+      }
+    },
+    series: [{
+      type: 'heatmap',
+      coordinateSystem: 'calendar',
+      data
+    }]
+  }, true)
+}
+
 function renderAll() {
   renderPie()
   renderLine()
   renderBar()
   renderCompare()
+  renderCalendar()
 }
 
 function onResize() {
@@ -281,6 +361,7 @@ function onResize() {
   lineChart?.resize()
   barChart?.resize()
   contribChart?.resize()
+  calendarChart?.resize()
 }
 
 /* ---------------- 展示辅助 ---------------- */
@@ -346,6 +427,7 @@ onBeforeUnmount(() => {
   lineChart?.dispose()
   barChart?.dispose()
   contribChart?.dispose()
+  calendarChart?.dispose()
 })
 </script>
 
@@ -445,6 +527,21 @@ onBeforeUnmount(() => {
     <div class="panel__body" style="padding-top: 0">
       <div v-if="!trendPoints.length" class="empty">今年还没有支出记录</div>
       <div v-else ref="lineRef" style="height: 260px"></div>
+    </div>
+  </div>
+
+  <!-- 消费日历热力图 -->
+  <div class="panel">
+    <div class="panel__head">
+      <span>哪几天花得多</span>
+      <span class="faint" style="font-size: 12px">今年逐日</span>
+    </div>
+    <div class="panel__body" style="padding-top: 0">
+      <div v-if="!dailyPoints.length" class="empty">今年还没有支出记录</div>
+      <div v-else ref="calendarRef" style="height: 300px"></div>
+      <div class="field__hint" style="margin-top: 8px">
+        颜色越深表示当天花得越多；空白格子是那天没记账
+      </div>
     </div>
   </div>
 
