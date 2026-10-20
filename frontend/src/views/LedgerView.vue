@@ -17,7 +17,7 @@ import {
   LEDGER_STATE_LABEL,
   LEDGER_TYPE_CLASS,
   LEDGER_STATE_CLASS,
-  directionLabel,
+  entryRoleLabel,
   today
 } from '@/utils/format'
 
@@ -387,7 +387,7 @@ onMounted(load)
               <td class="mono">{{ e.entryNo }}</td>
               <td>
                 <span class="tag" :class="e.direction === 'DEBIT' ? 'tag--debit' : 'tag--credit'">
-                  {{ directionLabel(e.direction) }}
+                  {{ entryRoleLabel(e.direction, detail.ledgerType, e.subjectType) }}
                 </span>
               </td>
               <td>

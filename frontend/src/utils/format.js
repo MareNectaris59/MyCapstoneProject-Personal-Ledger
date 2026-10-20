@@ -112,11 +112,45 @@ export const LEDGER_STATE_CLASS = {
 }
 
 /**
- * 借贷方向的用户可读名。
+ * 一条分录在这笔业务里扮演的角色。
  *
- * 界面上不出现「借 / 贷」两个会计字，改用「支出方 / 收入方」——
- * 用户不需要懂会计术语，只要能看懂"这笔钱从哪出、归到哪一类"。
+ * ⚠️ **不能只按方向（借/贷）映射**。
+ *
+ * 借/贷是「方向」，而「支出方 / 收入方」是「语义」，两者并不一一对应。
+ * 支出业务的分录是「借 费用 / 贷 资产」：
+ *   借方那条是费用增加（支出确实发生了）；
+ *   贷方那条是资产减少（钱从账户里付出去）—— 把它叫「收入方」，
+ *   用户会以为自己收到了钱。这是个真实存在过的错误。
+ *
+ * 收入业务恰好反过来（借 资产 / 贷 收入）；转账两边都是资产账户
+ * （借 转入 / 贷 转出），"支出/收入"这套说法同样不适用。
+ * 所以必须结合业务类型判断，必要时再看科目类型。
+ *
+ * @param {string} direction   DEBIT | CREDIT
+ * @param {string} ledgerType  EXPENSE | INCOME | TRANSFER | OPENING | REVERSAL
+ * @param {string} [subjectType] ASSET | LIABILITY | EQUITY | INCOME | EXPENSE
+ *                               仅 REVERSAL 时用来区分"退回账户"与"冲减支出"
  */
-export function directionLabel(direction) {
-  return direction === 'DEBIT' ? '支出方' : '收入方'
+export function entryRoleLabel(direction, ledgerType, subjectType) {
+  const isDebit = direction === 'DEBIT'
+
+  // 冲正单的科目方向是原凭证的反面：资产退回叫"退回账户"，
+  // 费用/收入被冲减则叫"冲减支出/收入"，只能靠科目类型区分。
+  if (ledgerType === 'REVERSAL') {
+    if (subjectType === 'ASSET') return isDebit ? '退回账户' : '扣回账户'
+    if (subjectType === 'INCOME') return '冲减收入'
+    return '冲减支出'
+  }
+
+  switch (ledgerType) {
+    case 'OPENING':
+      return isDebit ? '期初记入' : '期初来源'
+    case 'INCOME':
+      return isDebit ? '收进账户' : '收入来源'
+    case 'TRANSFER':
+      return isDebit ? '转入账户' : '转出账户'
+    case 'EXPENSE':
+    default:
+      return isDebit ? '支出分类' : '付款账户'
+  }
 }

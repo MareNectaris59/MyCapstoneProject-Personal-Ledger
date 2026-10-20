@@ -342,7 +342,7 @@ async function submit() {
           <input id="remark" v-model="form.remark" placeholder="选填" maxlength="255" />
         </div>
 
-        <BalanceScale :lines="preview" />
+        <BalanceScale :lines="preview" :ledger-type="tab === 'expense' ? 'EXPENSE' : tab === 'income' ? 'INCOME' : 'TRANSFER'" />
 
         <div class="mt-4">
           <button type="submit" :disabled="busy">
