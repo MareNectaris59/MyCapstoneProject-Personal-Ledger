@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import './assets/theme.css'
+import './assets/aero.css'   // Frutiger Aero material layer (experiment branch)
 
 /**
  * 应用入口。
