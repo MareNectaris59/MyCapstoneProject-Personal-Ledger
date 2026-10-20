@@ -219,22 +219,10 @@ public class LedgerCoreService {
         if (original == null || !original.getUserId().equals(userId)) {
             throw BizException.of(ResultCode.LEDGER_NOT_FOUND);
         }
-        if (original.getLedgerType() == LedgerType.REVERSAL) {
-            throw BizException.of(ResultCode.LEDGER_STATE_INVALID, "冲正单不能再被冲正");
-        }
-        if (!original.isReversible()) {
-            throw BizException.of(ResultCode.LEDGER_ALREADY_REVERSED);
-        }
+        // 状态与金额校验抽到 ReversalAllocator：那是纯函数，有独立单元测试
+        BigDecimal reversalAmount = ReversalAllocator.resolveAmount(original, amount);
 
-        BigDecimal reversible = original.reversibleAmount();
-        BigDecimal reversalAmount = amount == null ? reversible : amount;
-        MoneyUtil.validateAmount(reversalAmount);
-        if (reversalAmount.compareTo(reversible) > 0) {
-            throw BizException.of(ResultCode.REVERSAL_AMOUNT_EXCEEDED,
-                    "最多可冲正 " + MoneyUtil.toPlainString(reversible));
-        }
-
-        List<Entry> originalEntries = listEntries(ledgerId);
+List<Entry> originalEntries = listEntries(ledgerId);
         List<Subject> subjects = loadSubjectsByIds(userId,
                 originalEntries.stream().map(Entry::getSubjectId).distinct().toList());
 
@@ -245,8 +233,8 @@ public class LedgerCoreService {
         ledgerMapper.updateById(reversal);
 
         // 构造反向分录，金额按比例拆分，末条承担舍入差额（§7.4.2 R4）
-        List<Entry> reversalEntries = buildReversalEntries(
-                original, originalEntries, reversal.getId(), reversalAmount);
+        List<Entry> reversalEntries = ReversalAllocator.allocate(
+                reversal.getId(), original.getAmount(), originalEntries, reversalAmount);
 
         // 冲正单同样要过平衡校验（会跳过 C6 科目组合校验，见 BalanceValidator）
         balanceValidator.validate(LedgerType.REVERSAL, reversalEntries, subjects, userId);
@@ -269,49 +257,6 @@ public class LedgerCoreService {
                 MoneyUtil.toPlainString(reversalAmount), original.getState());
 
         return getDetail(userId, reversal.getId());
-    }
-
-    /**
-     * 按比例把冲正金额拆分到各条原分录上。
-     *
-     * <p>原凭证金额 100.00、两条分录各 100.00，用户冲正 33.33 时两条反向分录
-     * 各 33.33，恰好平衡。若出现除不尽，前 n−1 条按 HALF_UP 舍入，
-     * 最后一条用「冲正金额 − 本方向已分配合计」补齐，保证冲正单自身借贷平衡。
-     */
-    private List<Entry> buildReversalEntries(Ledger original, List<Entry> originalEntries,
-                                             Long reversalLedgerId, BigDecimal reversalAmount) {
-        BigDecimal originalAmount = original.getAmount();
-        boolean fullReversal = reversalAmount.compareTo(originalAmount) == 0;
-
-        List<Entry> result = new ArrayList<>(originalEntries.size());
-        BigDecimal debitAssigned = BigDecimal.ZERO;
-        BigDecimal creditAssigned = BigDecimal.ZERO;
-
-        for (int i = 0; i < originalEntries.size(); i++) {
-            Entry src = originalEntries.get(i);
-            boolean last = (i == originalEntries.size() - 1);
-
-            BigDecimal piece;
-            if (fullReversal) {
-                piece = src.getAmount();
-            } else if (last) {
-                BigDecimal already = src.getDirection() == Direction.DEBIT ? debitAssigned : creditAssigned;
-                piece = reversalAmount.subtract(already);
-            } else {
-                piece = src.getAmount()
-                        .multiply(reversalAmount)
-                        .divide(originalAmount, MoneyUtil.SCALE, RoundingMode.HALF_UP);
-            }
-
-            if (src.getDirection() == Direction.DEBIT) {
-                debitAssigned = debitAssigned.add(piece);
-            } else {
-                creditAssigned = creditAssigned.add(piece);
-            }
-
-            result.add(Entry.reversalOf(reversalLedgerId, src.getEntryNo(), src, piece));
-        }
-        return result;
     }
 
     // ================================================================

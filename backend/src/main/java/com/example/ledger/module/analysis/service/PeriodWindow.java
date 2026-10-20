@@ -105,8 +105,14 @@ public final class PeriodWindow {
      */
     public static Aligned align(LocalDate baseStart, LocalDate baseEnd, long elapsedDays) {
         long baseLen = baseEnd.toEpochDay() - baseStart.toEpochDay() + 1;
-        if (elapsedDays >= baseLen) {
-            // 基期本身比"已过天数"还短（如 3 月 30 日对齐 2 月的 28 天）：
+
+        // 边界判断用 > 而不是 >=：
+        //   已过天数恰好等于基期长度时，两段窗口本来就等长，属于"已经对齐"，
+        //   不该再报"基期天数不足"。写成 >= 会让 2 月整月对上 28 天时
+        //   误报一个"基期天数不足"的提示，用户看到会以为数据有问题。
+        //   （这条是单元测试 exactLengthIsAligned 抓出来的。）
+        if (elapsedDays > baseLen) {
+            // 基期比"已过天数"还短（如 3 月 30 日对齐 2 月的 28 天）：
             // 按整段计算，并如实标记未对齐，不做静默截断
             return new Aligned(baseStart, baseEnd, false);
         }
