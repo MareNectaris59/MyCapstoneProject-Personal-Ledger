@@ -11,7 +11,7 @@ Vue 3 + Vite 单文件组件工程，为「个人复式记账与消费分析系�
 | Vue Router | ^4.6.4 | hash 模式（见下） |
 | Pinia | ^4.0.3 | 状态管理 |
 | Axios | ^1.16.1 | HTTP 客户端 |
-| TypeScript | ^5.9.3 | 装了依赖，但源码目前是 JS；迁移到 TS 时直接改后缀即可 |
+| TypeScript | 未使用 | 源码是 JS。曾装过 `typescript` + `vue-tsc` 并配了 `type-check` 脚本，但仓库里没有 `tsconfig.json`，那条命令必然报错，已连同依赖一起移除。理由见文末「为什么没有 TypeScript」 |
 | Element Plus | ^2.14.7 | 装了依赖，**尚未接入**（见下） |
 | ECharts | ^6.1.0 | 装了依赖，**尚未使用**（消费分析图表待后端接口就绪） |
 
@@ -141,7 +141,27 @@ Fira 不含中文字形，字体栈必须回退到 `Microsoft YaHei` 等中文�
 
 ## 已知未完成项
 
-- [ ] 源码迁移到 TypeScript（依赖已装，`npm run type-check` 已配置）
+- [ ] 源码迁移到 TypeScript（见下方说明：这是独立工程，不是"改后缀"）
+
+---
+
+## 为什么没有 TypeScript
+
+这个项目**不做** TS 迁移，且已经删掉了那套跑不通的工具链。三个理由：
+
+1. **它本来就不工作。** `package.json` 里有 `"type-check": "vue-tsc --noEmit"`，
+   但仓库里从来没有 `tsconfig.json`。跑一下就报错退出 ——
+   留一个必然失败的命令，比没有这个命令更糟（会让人以为项目有类型检查）。
+2. **`checkJs` 之类的折中方案在这里没有价值。** 前端 3227 行（12 个 `.vue` + 5 个 `.js`），
+   接口返回全是 `any`。没有类型化的接口契约时，`checkJs: true` 只能查出
+   "隐式 any"，查不出真正的错误 —— 付出配置成本却换不到保护。
+3. **真做就得整体重写。** 要有意义，得同时定义 API 响应的 interface、
+   给 Pinia store 加泛型、把 `ref()` 逐个标注。这是独立工程，
+   而当前行为已经被 297 项端到端断言兜住，风险收益不划算。
+
+**如果将来要做**，正确顺序是：先写 `src/api/types.ts` 定义响应结构，
+再逐文件从 `stores/` 和 `api/` 开始改（它们是所有视图的数据来源），
+最后才动视图。同时把 `typescript`、`vue-tsc` 加回 devDependencies 并补 `tsconfig.json`。
 - [ ] 账目导出（目前只有分析结果可导出 CSV）
 
 已完成（曾列在本节）：消费分析图表、预算页面、修改密码与个人资料页面。
