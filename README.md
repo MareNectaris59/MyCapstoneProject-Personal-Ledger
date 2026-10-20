@@ -15,7 +15,7 @@
 | 前端 | ✅ Vite + Vue 3 单文件组件，**轻量 Claymorphism** 风格，**9 个页面**（登录 / 总览 / 记一笔 / 账目 / 支出分类 / 预算 / 消费分析 / 科目明细 / 账号设置） |
 | 预算模块 | ✅ 总额与分类预算、周/月/自定义周期、滚动结转、预警。AC-08/09 通过 |
 | 消费分析 | ✅ 总览 / 占比 / 趋势 / 同环比 / 贡献度 / 预算执行 / 周期报表 / CSV 导出，ECharts 图表 |
-| 验收测试 | ✅ **377 项全通过**（7 套脚本，覆盖 AC-01 ~ AC-13 全部 13 条）+ 115 项 JUnit 单元测试 |
+| 验收测试 | ✅ **381 项全通过**（7 套脚本，覆盖 AC-01 ~ AC-13 全部 13 条）+ 115 项 JUnit 单元测试 |
 | 部署（Nginx/HTTPS） | ⬜ 未实现（按计划跳过，见 §未做的部分） |
 | 邮件验证码 / Redis / 数据导入 | ⬜ 未实现（按计划跳过，见 §未做的部分） |
 
@@ -207,8 +207,8 @@ npm run build
 ```powershell
 Set-Location -LiteralPath '<项目>\backend'
 
-# 七套脚本，合计 377 项
-powershell -ExecutionPolicy Bypass -File .\test-api.ps1              # 69 项  记账核心 + AC-01~06
+# 七套脚本，合计 381 项
+powershell -ExecutionPolicy Bypass -File .\test-api.ps1              # 73 项  记账核心 + AC-01~06
 powershell -ExecutionPolicy Bypass -File .\test-acceptance.ps1       # 43 项  AC-03/04/05/07/13 + 100 并发
 powershell -ExecutionPolicy Bypass -File .\test-budget.ps1           # 54 项  预算模块 + AC-08/09
 powershell -ExecutionPolicy Bypass -File .\test-analysis.ps1         # 74 项  分析模块 + AC-10/11 + CSV 导出

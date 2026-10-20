@@ -4,7 +4,7 @@
 #  NOTE: this file must stay PURE ASCII. Windows PowerShell 5.1 reads .ps1 with
 #  the system ANSI code page, so Chinese literals get mangled and break string
 #  terminators, tearing the whole script apart at parse time.
-#  Chinese documentation: docs/环境搭建与部署.md
+#  Chinese-language guides live under docs/ ; README.md links every one of them
 #
 #  What it does, in order:
 #    1. checks that java / mvn / mysql are on PATH (node is optional)
@@ -78,7 +78,7 @@ if ($missing.Count -gt 0) {
     Write-Host ''
     Write-Host "Missing required tools: $($missing -join ', ')" -ForegroundColor Red
     Write-Host 'Install them, then re-run this script.' -ForegroundColor Red
-    Write-Host 'Versions and links: docs/环境搭建与部署.md' -ForegroundColor Red
+    Write-Host 'Versions and links: see docs/ (README.md lists every guide)' -ForegroundColor Red
     exit 1
 }
 

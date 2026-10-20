@@ -12,6 +12,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -140,6 +141,30 @@ public class GlobalExceptionHandler {
     public Result<Void> handleNoResource(NoResourceFoundException ex, HttpServletRequest request) {
         log.warn("路径不存在 traceId={} uri={}", TraceIdHolder.current(), request.getRequestURI());
         return Result.failure(ResultCode.NOT_FOUND.getCode(), "请求的路径不存在");
+    }
+
+    /**
+     * Content-Type 不被接口接受。
+     *
+     * <p>踩过：调用方把 JSON 以 {@code text/plain} 发到 {@code /auth/register}，
+     * 此前会落进兜底分支，对外返回 1901「系统开小差了」，服务端还记了一条
+     * ERROR 与完整堆栈 —— 两边的信息都是错的：
+     * 调用方看不出是自己传错了格式，运维还会误以为服务出了故障。
+     *
+     * <p>现在返回 415 并直接说明需要什么格式。这是调用方的问题，
+     * 不该以 5xx 呈现，也不该污染错误日志。
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    @ResponseStatus(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+    public Result<Void> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex,
+                                                    HttpServletRequest request) {
+        log.warn("Content-Type 不支持 traceId={} uri={} contentType={}",
+                TraceIdHolder.current(), request.getRequestURI(), ex.getContentType());
+        String message = "请求格式不对";
+        if (ex.getSupportedMediaTypes() != null && !ex.getSupportedMediaTypes().isEmpty()) {
+            message += "，该接口只接受 " + ex.getSupportedMediaTypes();
+        }
+        return Result.failure(ResultCode.PARAM_INVALID.getCode(), message);
     }
 
     /** 兜底：未预期的异常，记 ERROR 与完整堆栈，对外只给安全文案。 */

@@ -100,9 +100,9 @@ foreach ($n in 'NewCatA', 'NewCatB') {
 Write-Host ''
 Write-Host '=== 9. new node must be a child of the type root, not a sibling ==='
 $tree5 = Call GET '/api/v1/subjects/tree?type=ASSET' $null $token
-Write-Host "  ASSET tree root count=$(@($tree5.data).Count)  (expect 1 - only the '资产' root)"
+Write-Host "  ASSET tree root count=$(@($tree5.data).Count)  (expect 1 - only the ASSET root)"
 $exp5 = Call GET '/api/v1/subjects/tree?type=EXPENSE' $null $token
-Write-Host "  EXPENSE tree root count=$(@($exp5.data).Count)  (expect 1 - only the '费用' root)"
+Write-Host "  EXPENSE tree root count=$(@($exp5.data).Count)  (expect 1 - only the EXPENSE root)"
 
 Write-Host ''
 Write-Host '=== 10. deleting a leaf that HAS ledger entries must be refused ==='

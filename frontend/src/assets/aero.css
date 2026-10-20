@@ -525,49 +525,141 @@ tbody tr:hover {
    卡片的分离度靠"更强的外投影"而不是"更白"来解决。 */
 
 .auth {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+  min-height: 100vh;
+  padding: 0;
+  /* 覆盖 theme.css 的两件事：
+     1. background：整屏背景已经交给 .auth__art，页面本身不该再有图；
+     2. align-items: center —— 那是"居中一张卡片"的布局逻辑。
+        网格里的 center 会让左右两栏缩成内容高度，
+        左侧壁纸就撑不满了。必须显式 stretch。 */
+  background: none;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+/* 左侧：壁纸。
+   叠层取向与上一版一致 —— 这张图偏中蓝（平均 #5984CD，亮度 128），
+   不能用重暗角，否则整块发闷。这里只需要**底部压暗**：
+   品牌文案贴左下角，而壁纸的亮光带正好在右下，不压会糊。 */
+.auth__art {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  padding: 56px;
+  overflow: hidden;
   background:
-    /* 1. 中心极淡提亮（只有 9%）：够把视线收拢，又不糊掉飘带 */
-    radial-gradient(ellipse 58% 58% at 50% 44%,
-                    rgba(255, 255, 255, 0.09) 0%,
-                    rgba(255, 255, 255, 0) 74%),
-    /* 2. 轻度暗角（38%）：比上一版的 52% 轻得多，这图本身够亮 */
-    radial-gradient(ellipse 96% 96% at 50% 50%,
-                    rgba(6, 30, 66, 0) 48%,
-                    rgba(6, 30, 66, 0.38) 100%),
-    /* 3. 顶部湖青、底部略沉：把色温拉向 Aero，同时给底部压一点重量 */
     linear-gradient(180deg,
-                    rgba(89, 214, 220, 0.12) 0%,
-                    rgba(26, 140, 255, 0.04) 50%,
-                    rgba(4, 24, 52, 0.16) 100%),
-    /* 4. 壁纸本身 */
+                    rgba(4, 24, 52, 0) 38%,
+                    rgba(4, 24, 52, 0.42) 100%),
+    linear-gradient(180deg,
+                    rgba(89, 214, 220, 0.14) 0%,
+                    rgba(26, 140, 255, 0) 42%),
     url('./login-bg.jpg') center / cover no-repeat,
-    /* 5. 兜底色取全图平均色 #5984CD，加载完成前后不会跳色 */
     #5984cd;
 }
 
-/* 登录卡片：背后是中等亮度的蓝。
-   刻意**不**再降低透明度 —— 深底上透明度能换来"玻璃感"，
-   但在这张亮蓝上只会让卡片变灰、丢掉轮廓。
-   分离度改由外投影承担：一圈 1px 深色描边 + 大面积柔和暗影，
-   卡片就会从亮蓝背景上"浮"起来。 */
-.auth__box {
-  background:
-    var(--gloss-soft),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(240, 249, 255, 0.92) 100%);
-  backdrop-filter: blur(22px) saturate(160%);
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.98);
-  box-shadow:
-    /* 顶部一道亮边 + 内侧一圈极淡的青光，模拟玻璃边缘的折射 */
-    inset 0 1px 0 #fff,
-    inset 0 0 0 1px rgba(200, 240, 255, 0.55),
-    0 0 0 1px rgba(8, 34, 72, 0.16),
-    0 28px 64px rgba(8, 34, 72, 0.42);
+.auth__artInner {
+  position: relative;
+  color: #fff;
+}
+
+.auth__brand {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  line-height: 1.2;
+  text-shadow: 0 2px 14px rgba(4, 24, 52, 0.45);
+}
+
+.auth__tagline {
+  margin: 10px 0 0;
+  font-size: var(--fs-base);
+  color: rgba(255, 255, 255, 0.94);
+  text-shadow: 0 1px 8px rgba(4, 24, 52, 0.5);
+}
+
+/* 右侧：表单落在纯白面板上。
+   分栏的真正理由在这里 —— 表单需要稳定的高对比度，
+   而壁纸亮度不可控。白色面板 + 深蓝字，输入框与报错都不会看不清。 */
+.auth__panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 40px;
+  background: #fff;
+  /* 一道极淡的向左投影，让白面板从壁纸上"立"起来 */
+  box-shadow: -18px 0 40px rgba(8, 34, 72, 0.10);
+}
+
+.auth__form {
+  width: 100%;
+  max-width: 340px;
 }
 
 .auth__title {
+  font-size: 26px;
+  line-height: 1.2;
   color: var(--aero-deep);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.auth__sub {
+  margin: 8px 0 26px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+/* 输入框前置图标：包一层相对定位，图标绝对定位，输入框用 padding-left 让开。
+   集中在这里写，比每处 input 各自加图标好维护。 */
+.auth__input {
+  position: relative;
+}
+
+.auth__input > svg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 17px;
+  height: 17px;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.auth__input input {
+  padding-left: 42px;
+  padding-right: 44px;
+}
+
+/* 显示/隐藏密码。button 在 theme.css 里有渐变底与阴影，
+   这里要全部撤掉，只留一个可点的图标区。 */
+.auth__eye {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  box-shadow: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.auth__eye:hover {
+  color: var(--primary);
+  background: rgba(11, 111, 214, 0.07);
+}
+
+.auth__eye svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* ==========================================================================
@@ -597,10 +689,43 @@ tbody tr:hover {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-  .auth__box {
-    background: #ffffff;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+}
+
+/* 窄屏登录页：分栏折回单列。
+   直接隐藏左图、让表单占满，而不是把两栏各压到一半 ——
+   "半张图 + 半张表单"在任何宽度下都不好看。
+   壁纸退到页面背景，表单用一张玻璃卡片浮起来，逻辑与改版前一致。 */
+@media (max-width: 880px) {
+  .auth {
+    grid-template-columns: 1fr;
+    background:
+      linear-gradient(180deg, rgba(4, 24, 52, 0.08) 0%, rgba(4, 24, 52, 0.34) 100%),
+      url('./login-bg.jpg') center / cover no-repeat,
+      #5984cd;
+  }
+
+  .auth__art {
+    display: none;
+  }
+
+  .auth__panel {
+    padding: 32px 20px;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .auth__form {
+    max-width: 400px;
+    padding: 32px 28px;
+    border-radius: var(--radius);
+    background:
+      var(--gloss-soft),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(240, 249, 255, 0.94) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.98);
+    box-shadow:
+      inset 0 1px 0 #fff,
+      0 0 0 1px rgba(8, 34, 72, 0.14),
+      0 24px 56px rgba(8, 34, 72, 0.38);
   }
 }
 /* ==========================================================================

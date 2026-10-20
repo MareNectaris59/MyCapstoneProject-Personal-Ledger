@@ -13,7 +13,7 @@
       AC-06  replaying a write with the same idempotency key is a no-op
       plus     non-leaf / same-account / double-reversal guards
 
-    Two conventions from docs/系统设计说明书.md §6.1.4 shape how this test
+    Two conventions from docs/system design doc section 6.1.4 shape how this test
     interprets responses, and getting them wrong produces very confusing
     results:
 
@@ -30,11 +30,11 @@
     code page, so a Chinese literal inside a script would be mangled into a
     parse error.
 
-    Subject codes used (docs/数据库设计.md section 6):
-      100104    支付宝   (ALIPAY)
-      100102    银行卡   (BANK)
-      500101    餐饮     (non-leaf expense group)
-      50010102  午餐     (leaf expense)
+    Subject codes used (docs/database design doc section 6):
+      100104    Alipay   (ALIPAY)
+      100102    bank card (BANK)
+      500101    food      (non-leaf expense group)
+      50010102  lunch     (leaf expense)
 
     Run the backend first:  .\build.ps1 run
     Then:                   .\test-api.ps1
@@ -375,6 +375,32 @@ Check 'token rejected after logout' $after.ok $false
 Check 'rejection is HTTP 401' $after.http 401
 
 Write-Host ''
+# ------------------------------------------------------------------ media type
+# A wrong Content-Type used to fall through to the catch-all handler and answer
+# 1901 "the system glitched", with a full stack trace logged as ERROR. Both were
+# misleading: the caller could not tell it was their own mistake, and ops would
+# think the service was broken. It must now be 415 with a message naming the
+# media types the endpoint accepts.
+Write-Host ''
+Write-Host '=== wrong Content-Type is a client error, not a server fault ===' -ForegroundColor Cyan
+
+$badReq = New-Object System.Net.Http.HttpRequestMessage(
+    [System.Net.Http.HttpMethod]::new('POST'), "$BaseUrl/api/v1/auth/register")
+$badContent = New-Object System.Net.Http.StringContent('{"email":"x@example.com","password":"whatever1"}')
+$badContent.Headers.ContentType =
+    [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('text/plain')
+$badReq.Content = $badContent
+$badResp = $script:http.SendAsync($badReq).GetAwaiter().GetResult()
+$badBody = $badResp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+$badStatus = [int]$badResp.StatusCode
+$badResp.Dispose(); $badReq.Dispose()
+$badParsed = $badBody | ConvertFrom-Json
+
+Check 'unsupported media type returns HTTP 415' $badStatus 415
+Check 'it is not reported as an internal error' ($badParsed.code -ne 1901) $true
+Check 'it is reported as a parameter problem' $badParsed.code 1101
+Check-True 'the message names the accepted media types' ($badParsed.message -match 'json')
+
 Write-Host ('=' * 62)
 if ($script:fail -eq 0) {
     Write-Host ("ALL {0} CHECKS PASSED" -f $script:pass) -ForegroundColor Green
