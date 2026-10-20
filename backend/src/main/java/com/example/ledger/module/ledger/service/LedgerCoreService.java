@@ -291,7 +291,8 @@ List<Entry> originalEntries = listEntries(ledgerId);
                               LocalDate startDate, LocalDate endDate, LedgerType ledgerType,
                               Long subjectId, java.math.BigDecimal minAmount,
                               java.math.BigDecimal maxAmount,
-                              String sortBy, String sortOrder) {
+                              String sortBy, String sortOrder,
+                              String keyword) {
         if (minAmount != null && maxAmount != null && minAmount.compareTo(maxAmount) > 0) {
             throw com.example.ledger.common.exception.BizException.of(
                     com.example.ledger.common.result.ResultCode.PARAM_INVALID,
@@ -308,6 +309,16 @@ List<Entry> originalEntries = listEntries(ledgerId);
 
         if (subjectId != null) {
             qw.apply("id IN (SELECT ledger_id FROM entry WHERE subject_id = {0})", subjectId);
+        }
+
+        // 关键词搜索：备注 或 单据号 包含。
+        // 必须先经 SqlLike.escape —— 参数化只防注入，不防通配符：
+        // 用户输入一个 % 会让 LIKE 匹配全部记录，那是反直觉的。
+        String likeValue = com.example.ledger.common.util.SqlLike.escape(keyword);
+        if (likeValue != null) {
+            qw.and(w -> w.like(Ledger::getRemark, likeValue)
+                         .or()
+                         .like(Ledger::getLedgerNo, likeValue));
         }
 
         boolean asc = "asc".equalsIgnoreCase(sortOrder);

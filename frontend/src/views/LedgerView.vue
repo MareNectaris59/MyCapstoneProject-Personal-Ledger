@@ -31,6 +31,7 @@ const page = ref(1)
 const loading = ref(false)
 
 const filters = ref({
+  keyword: '',
   ledgerType: '',
   startDate: '',
   endDate: '',
@@ -98,6 +99,7 @@ async function load() {
   loading.value = true
   try {
     const params = { page: page.value, size: PAGE_SIZE }
+    if (filters.value.keyword.trim()) params.keyword = filters.value.keyword.trim()
     if (filters.value.ledgerType) params.ledgerType = filters.value.ledgerType
     if (filters.value.startDate) params.startDate = filters.value.startDate
     if (filters.value.endDate) params.endDate = filters.value.endDate
@@ -233,6 +235,16 @@ onMounted(load)
   <div class="panel">
     <div class="panel__body">
       <div class="row">
+        <div class="field mb-0" style="flex: 2 1 220px">
+          <label class="field__label" for="f-keyword">搜索</label>
+          <input
+            id="f-keyword"
+            v-model="filters.keyword"
+            placeholder="备注或单据号，回车即查"
+            maxlength="50"
+            @keyup.enter="search"
+          />
+        </div>
         <div class="field mb-0">
           <label class="field__label" for="f-type">类型</label>
           <select id="f-type" v-model="filters.ledgerType">

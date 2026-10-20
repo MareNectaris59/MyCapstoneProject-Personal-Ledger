@@ -135,9 +135,14 @@ public class LedgerController {
                                           @RequestParam(required = false) BigDecimal minAmount,
                                           @RequestParam(required = false) BigDecimal maxAmount,
                                           @RequestParam(required = false) String sortBy,
-                                          @RequestParam(required = false) String sortOrder) {
+                                          @RequestParam(required = false) String sortOrder,
+                                          @RequestParam(required = false)
+                                          @jakarta.validation.constraints.Size(max = 50,
+                                                  message = "搜索词不能超过 50 字")
+                                          String keyword) {
         IPage<Ledger> result = ledgerCoreService.page(user.userId(), page, size,
-                startDate, endDate, ledgerType, subjectId, minAmount, maxAmount, sortBy, sortOrder);
+                startDate, endDate, ledgerType, subjectId, minAmount, maxAmount,
+                sortBy, sortOrder, keyword);
         return Result.success(PageResult.of(result));
     }
 

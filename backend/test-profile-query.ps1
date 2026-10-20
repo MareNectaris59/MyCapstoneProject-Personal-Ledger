@@ -337,6 +337,54 @@ Check 'size at the limit is accepted' (Call GET '/api/v1/ledgers?page=1&size=200
 Check 'negative page rejected' (Call GET '/api/v1/ledgers?page=-1' $null $token).code 1101
 Check 'subject entries limit above 200 rejected' (Call GET "/api/v1/subjects/$($fx.lunchId)/entries?limit=201" $null $token).code 1101
 
+# ------------------------------------------------------------------ keyword search
+Write-Host ''
+Write-Host '=== keyword search (remark / ledger no) ===' -ForegroundColor Cyan
+
+# Book three more expenses AFTER the earlier assertions, so their totals are not
+# disturbed. Distinctive remarks let the search be checked precisely.
+$marks = @('coffee with team', 'lunch box', 'special 50% off')
+foreach ($mark in $marks) {
+    Call POST '/api/v1/ledgers/expense' (,@{
+        amount = '11.00'; expenseSubjectId = $fx.lunchId
+        assetSubjectId = $fx.alipayId; occurredDate = '2026-10-20'; remark = $mark
+    }) $token | Out-Null
+}
+
+$hitCoffee = Call GET '/api/v1/ledgers?page=1&size=50&keyword=coffee' $null $token
+Check 'keyword matches a remark' $hitCoffee.data.total 1
+Check 'matched row carries the remark' $hitCoffee.data.records[0].remark 'coffee with team'
+
+$hitLunch = Call GET '/api/v1/ledgers?page=1&size=50&keyword=lunch' $null $token
+Check 'keyword matches a different remark' $hitLunch.data.total 1
+
+# A ledger number prefix must also match (search covers the receipt no).
+$sampleNo = $hitCoffee.data.records[0].ledgerNo
+$prefix = $sampleNo.Substring(0, 10)
+$hitNo = Call GET ("/api/v1/ledgers?page=1&size=50&keyword=" + $prefix) $null $token
+Check-True 'keyword matches a ledger-number prefix' ($hitNo.data.total -ge 1)
+
+# THE important one: % and _ are LIKE wildcards. Without escaping, "%" would
+# return every ledger. The search must treat them as literal characters.
+$hitPercent = Call GET '/api/v1/ledgers?page=1&size=50&keyword=%25' $null $token
+Check 'percent is literal, not a wildcard' $hitPercent.data.total 1
+Check 'percent matched the right row' $hitPercent.data.records[0].remark 'special 50% off'
+
+$hitUnderscore = Call GET '/api/v1/ledgers?page=1&size=50&keyword=_' $null $token
+Check 'underscore is literal, not a wildcard' $hitUnderscore.data.total 0
+
+$hitNone = Call GET '/api/v1/ledgers?page=1&size=50&keyword=zzzzz' $null $token
+Check 'no match returns zero rows' $hitNone.data.total 0
+
+# Blank keyword must be ignored, not treated as "match everything" or "match nothing".
+$noFilter = Call GET '/api/v1/ledgers?page=1&size=50' $null $token
+$blankFilter = Call GET '/api/v1/ledgers?page=1&size=50&keyword=%20%20' $null $token
+Check 'blank keyword behaves like no filter' $blankFilter.data.total $noFilter.data.total
+
+# Length cap keeps LIKE from scanning absurd patterns.
+$tooLong = Call GET ("/api/v1/ledgers?page=1&size=50&keyword=" + ('a' * 51)) $null $token
+Check 'keyword over 50 chars rejected' $tooLong.code 1101
+
 # ------------------------------------------------------------------ summary
 Write-Host ''
 Write-Host ('=' * 62)
