@@ -107,7 +107,8 @@ app:
 logging:
   level:
     root: INFO
-    com.example.ledger: DEBUG
+    # 业务日志级别：默认 INFO，需要排查时设环境变量 APP_LOG_LEVEL=DEBUG
+    com.example.ledger: ${APP_LOG_LEVEL:INFO}
     # 排查鉴权问题时把下面这行打开，可以看到每个请求的过滤链决策
     # org.springframework.security: DEBUG
     # Redis 未安装时，Lettuce 的噪音日志会刷屏，这里压掉

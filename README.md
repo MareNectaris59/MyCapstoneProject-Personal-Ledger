@@ -32,6 +32,36 @@
 | 修改头像、默认账本（FR-U-03 的一部分） | 系统是单账本设计，界面上也没有任何头像展示位 —— 存了也看不到 |
 | 数据导入 / 部署 | 与邮件验证码同属后续阶段 |
 
+## 持续集成
+
+`.github/workflows/ci.yml` 会在每次推送时：
+
+1. 起 MySQL 并建库
+2. `mvn package`（含 JUnit 单元测试）
+3. 启动应用，等就绪
+4. 依次跑五套 PowerShell 端到端脚本
+
+> **注意**：这份工作流写好了但**尚未真实运行过** —— 项目还没有远程仓库，
+> 也就没有触发过 Actions。首次推送后若失败，先看「Start MySQL」与
+> 「Wait for readiness」两步（runner 镜像版本会影响 MySQL 启动方式）。
+
+## 日志
+
+日志默认写到 `logs/`，**相对于启动时的工作目录**：
+
+- 从项目根 `java -jar backend/target/...` → `<项目根>/logs`
+- 在 IDEA 里运行（工作目录通常是 `backend`）→ `backend/logs`
+
+启动日志的第一行会打印解析后的**绝对路径**，排查时以那一行为准。
+
+| 环境变量 | 作用 | 默认 |
+| --- | --- | --- |
+| `LOG_DIR` | 日志目录 | `logs`（相对） |
+| `APP_LOG_LEVEL` | 业务包日志级别 | `INFO` |
+
+需要详细日志时设 `APP_LOG_LEVEL=DEBUG`，不必改代码。
+（级别由 `application.yml` 的 `logging.level` 统一控制 —— Spring Boot 的这项
+配置优先级高于 `logback-spring.xml` 的 `<logger>`，两处都写会互相掩盖。）
 ## 环境要求
 
 JDK 17、Maven 3.9+、MySQL 8.0（运行中）、Node.js 20+。

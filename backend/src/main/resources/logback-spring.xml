@@ -12,6 +12,14 @@
 -->
 <configuration>
 
+    <!--
+        LOG_DIR 默认是相对路径 logs，**相对于启动时的工作目录**：
+          - 从项目根 `java -jar backend/target/...jar`  ->  根/logs
+          - 从 backend 目录启动                        ->  backend/logs
+          - IDEA 里跑（工作目录通常是 backend）        ->  backend/logs
+        这会导致日志散落在不同位置。启动日志里会打印解析后的绝对路径，
+        排查时以那一行为准；需要固定位置就设环境变量 LOG_DIR。
+    -->
     <property name="LOG_DIR" value="${LOG_DIR:-logs}"/>
     <property name="PATTERN"
               value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-}] %logger{40} - %msg%n"/>
@@ -44,7 +52,12 @@
         <appender-ref ref="FILE"/>
     </root>
 
-    <logger name="com.example.ledger" level="DEBUG"/>
+    <!--
+        业务包的日志级别**不在这里配**，而是 application.yml 的
+        logging.level.com.example.ledger（那里支持 ${APP_LOG_LEVEL:INFO}）。
+        原因：Spring Boot 的 logging.level.* 优先级高于 logback 的 <logger>，
+        两边都写会让人以为改了这里就生效，实际没有 —— 这个坑刚踩过。
+    -->
 
     <!-- 排查鉴权问题时打开，可以看到每个请求的过滤链决策 -->
     <!-- <logger name="org.springframework.security" level="DEBUG"/> -->
