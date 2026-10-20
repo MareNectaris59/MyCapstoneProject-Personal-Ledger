@@ -4,13 +4,14 @@
 #  NOTE: this file must stay PURE ASCII. Windows PowerShell 5.1 reads .ps1 with
 #  the system ANSI code page, so Chinese literals get mangled and break string
 #  terminators, which tears the whole script apart at parse time.
-#  Chinese documentation lives in docs/数据库备份说明.md
+#  Chinese documentation lives in docs/ (database backup notes).
 #
 #  Usage:
 #    .\backup-db.ps1                    # full dump of personal_ledger
 #    .\backup-db.ps1 -SchemaOnly        # structure only, no test data
 #    .\backup-db.ps1 -Name my-snapshot  # custom file name
 #    .\backup-db.ps1 -AllDatabases      # every database on the instance
+#    .\backup-db.ps1 -Snapshot          # single-file SQLite copy in db\ (for submission)
 #
 #  Why a dump instead of relocating MySQL's data files:
 #    MySQL's datadir (C:\ProgramData\MySQL\MySQL Server 8.0\Data) belongs to the
@@ -26,7 +27,8 @@ param(
     [string]$Password = '123456',
     [string]$Name,
     [switch]$SchemaOnly,
-    [switch]$AllDatabases
+    [switch]$AllDatabases,
+    [switch]$Snapshot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,6 +37,41 @@ $projectRoot = $PSScriptRoot
 $dumpDir = Join-Path $projectRoot 'db\dump'
 New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
 
+# ---------------------------------------------------------------- sqlite snapshot
+# Produces db\<Database>.db: one file, openable with any SQLite viewer, no MySQL
+# needed. It is a READ-ONLY copy for submission/demo - the running application
+# keeps using MySQL. See db/tools/mysql2sqlite.py for the type mapping rules.
+if ($Snapshot) {
+    $python = (Get-Command python -ErrorAction SilentlyContinue).Source
+    if (-not $python) { throw 'python not found on PATH (required for the SQLite snapshot)' }
+    $mysqlExe = (Get-Command mysql -ErrorAction SilentlyContinue).Source
+    if (-not $mysqlExe) { throw 'mysql client not found on PATH' }
+
+    $tool = Join-Path $projectRoot 'db\tools\mysql2sqlite.py'
+    if (-not (Test-Path -LiteralPath $tool)) { throw "converter not found: $tool" }
+
+    $outDb = Join-Path $projectRoot ('db\' + $Database + '.db')
+
+    Write-Host ''
+    Write-Host 'Building SQLite snapshot...' -ForegroundColor Cyan
+    Write-Host "  source : $Database (MySQL, read-only)"
+    Write-Host "  output : $outDb"
+    Write-Host ''
+
+    & $python $tool --mysql $mysqlExe --user $User --password $Password `
+        --database $Database --out $outDb
+    if ($LASTEXITCODE -ne 0) { throw "snapshot failed (exit=$LASTEXITCODE)" }
+
+    $item = Get-Item -LiteralPath $outDb
+    Write-Host ''
+    Write-Host "Done: $outDb" -ForegroundColor Green
+    Write-Host "  size : $([math]::Round($item.Length / 1KB, 1)) KB"
+    Write-Host ''
+    Write-Host 'Open with any SQLite viewer; MySQL is not required.'
+    Write-Host 'This is a READ-ONLY copy - the application still uses MySQL.'
+    Write-Host ''
+    exit 0
+}
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 
 # ---------------------------------------------------------------- build args

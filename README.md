@@ -51,6 +51,8 @@ C:\ProgramData\MySQL\MySQL Server 8.0\Data\personal_ledger\      （每表一个
 ```powershell
 .\backup-db.ps1                 # 完整导出到 db\dump\（含测试数据）
 .\backup-db.ps1 -SchemaOnly     # 只导出结构（交材料/提交用）
+.\backup-db.ps1 -Snapshot       # 另存 db\personal_ledger.db：单文件 SQLite 快照，
+                                # 老师不装 MySQL 也能打开看数据（不进版本库）
 ```
 
 详见 [数据库备份说明](docs/数据库备份说明.md) —— 里面解释了为什么**不该**改 `datadir`，
@@ -180,8 +182,11 @@ powershell -ExecutionPolicy Bypass -File .\test-delete-account.ps1   # 注销流
 ├── .gitignore                      只提交结构导出，不提交含凭据的完整导出
 ├── HANDOFF.md                      ★ 跨会话交接：进度、环境陷阱、设计决策
 ├── setup.ps1                       ★ 一键环境初始化（检查工具链 → 建库 → 构建）
-├── backup-db.ps1                   一键导出数据库到 db\dump\
+├── backup-db.ps1                   一键导出：.sql dump / -SchemaOnly / -Snapshot
 ├── db/
+│   ├── tools/
+│   │   └── mysql2sqlite.py        MySQL → SQLite 快照转换（只读）
+│   ├── personal_ledger.db         SQLite 快照（gitignored，答辩演示用）
 │   └── dump/                       .sql 导出（-schema 结尾的可提交）
 ├── docs/
 │   ├── 系统设计说明书.md           需求、用例、架构、接口、算法口径、验收标准

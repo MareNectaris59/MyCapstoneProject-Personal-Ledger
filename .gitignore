@@ -18,7 +18,7 @@ node_modules/
 
 # 第三方技能包（ui-ux-pro-max-skill）。它是设计参考工具，692 个文件 / 21 MB，
 # 与项目运行无关，不应进版本库。
-# 设计令牌的来源与检索命令已记录在 docs/前端Brutalism改造说明书.md §0，
+# 设计令牌的来源与取舍已记录在 docs/前端改版方案.md §2，
 # 即使没有这个目录也能看懂设计是怎么定下来的。
 .skills/
 
@@ -50,11 +50,21 @@ logs/
 *~
 *.orig
 
-# ---- 数据库导出 ----
+# ---- 数据库导出与快照 ----
 # 完整导出含测试邮箱与 BCrypt 密码哈希，不应提交。
 # 只提交结构导出（文件名以 -schema 结尾）。
 db/dump/*.sql
 !db/dump/*-schema.sql
+
+# SQLite 快照（.\backup-db.ps1 -Snapshot 生成）。同样是含测试账号的只读副本，
+# 只在本地留着用于答辩演示；需要交材料时直接拷这个文件，不必进版本库。
+db/*.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
+
+# 转换脚本的 Python 缓存
+db/tools/__pycache__/
 
 # ---- 敏感配置 ----
 # application.yml 里的数据库口令与 JWT 密钥属于开发默认值，
