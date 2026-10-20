@@ -102,6 +102,9 @@ jobs:
       - name: e2e - profile, query, security (test-profile-query)
         run: pwsh -NoProfile -File backend/test-profile-query.ps1
 
+      - name: e2e - CSV export / import (test-import-export)
+        run: pwsh -NoProfile -File backend/test-import-export.ps1
+
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4

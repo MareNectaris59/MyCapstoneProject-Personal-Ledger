@@ -133,6 +133,37 @@ export const api = {
   postIncome: (payload) => http.post('/ledgers/income', payload),
   postTransfer: (payload) => http.post('/ledgers/transfer', payload),
   ledgers: (params) => http.get('/ledgers', { params }),
+
+  /**
+   * 导入台账 CSV。
+   *
+   * 请求体直接是 CSV 文本（text/csv），不用 FormData —— 前端用 FileReader
+   * 读出字符串即可，服务端也少一层 multipart 解析。
+   *
+   * 服务端保证：整份文件先校验后写入，有一行不合格就一条都不写；
+   * 重复导入同一份文件是安全的（按文件哈希 + 行号去重，第二次全计 skipped）。
+   */
+  importLedgers: (csvText) =>
+    http.post('/ledgers/import', csvText, {
+      headers: { 'Content-Type': 'text/csv' }
+    }),
+
+  /**
+   * 导出台账 CSV。
+   *
+   * 与分析的导出同样走裸 axios + responseType 'blob'，因为 http 实例的
+   * 拦截器会按统一响应体解包，而这里拿到的是裸 CSV。
+   */
+  downloadLedgerCsv: async (params) => {
+    const token = sessionStorage.getItem('accessToken')
+    const resp = await axios.get('/api/v1/ledgers/export', {
+      params,
+      responseType: 'blob',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      timeout: 30000
+    })
+    return resp.data
+  },
   ledgerDetail: (id) => http.get(`/ledgers/${id}`),
   reverse: (id, payload) => http.post(`/ledgers/${id}/reverse`, payload),
   balanceCheck: () => http.get('/ledgers/balance-check'),

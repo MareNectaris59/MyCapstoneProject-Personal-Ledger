@@ -8,6 +8,7 @@ import com.example.ledger.module.ledger.dto.LedgerDetail;
 import com.example.ledger.module.ledger.dto.LedgerRequests;
 import com.example.ledger.module.ledger.entity.Ledger;
 import com.example.ledger.module.ledger.service.LedgerCoreService;
+import com.example.ledger.module.ledger.service.LedgerCsvService;
 import com.example.ledger.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -40,9 +41,12 @@ import java.util.Map;
 public class LedgerController {
 
     private final LedgerCoreService ledgerCoreService;
+    private final LedgerCsvService ledgerCsvService;
 
-    public LedgerController(LedgerCoreService ledgerCoreService) {
+    public LedgerController(LedgerCoreService ledgerCoreService,
+                            LedgerCsvService ledgerCsvService) {
         this.ledgerCoreService = ledgerCoreService;
+        this.ledgerCsvService = ledgerCsvService;
     }
 
     /** 记一笔支出 */
@@ -70,6 +74,48 @@ public class LedgerController {
                                         @Valid @RequestBody LedgerRequests.Transfer req) {
         return Result.success(ledgerCoreService.postTransfer(user.userId(),
                 req.withIdempotencyKey(idempotencyKey)));
+    }
+
+    /**
+     * 导出台账为 CSV。
+     *
+     * <p>与分析模块的导出同一约定：带 UTF-8 BOM（否则 Excel 打开中文乱码），
+     * 返回 {@code text/csv} 而不是统一响应体 —— 文件下载无法塞进 JSON。
+     */
+    @GetMapping("/export")
+    public org.springframework.http.ResponseEntity<byte[]> export(
+            @AuthenticationPrincipal CurrentUser user,
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            LocalDate startDate,
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            LocalDate endDate) {
+
+        byte[] payload = ledgerCsvService.exportCsv(user.userId(), startDate, endDate);
+        String filename = "ledgers.csv";
+        return org.springframework.http.ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + filename + "\"")
+                .body(payload);
+    }
+
+    /**
+     * 导入台账 CSV。
+     *
+     * <p>请求体直接是 CSV 文本（{@code text/csv}），不用 multipart：
+     * 前端用 FileReader 读出文本即可，服务端也少一层解析。
+     *
+     * <p>整份文件先校验后写入 —— 有一行不合格就一条都不写，
+     * 避免"导了一半"这种最难收拾的状态。重复导入同一份文件是安全的
+     * （幂等键由文件哈希 + 行号确定性生成，第二次全部计为 skipped）。
+     */
+    @PostMapping(value = "/import", consumes = "text/csv")
+    public Result<LedgerCsvService.ImportResult> importCsv(
+            @AuthenticationPrincipal CurrentUser user,
+            @RequestBody String csv) {
+        return Result.success(ledgerCsvService.importCsv(user.userId(), csv));
     }
 
     /** 账目分页查询 */

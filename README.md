@@ -11,11 +11,11 @@
 | --- | --- |
 | 设计文档 | ✅ [系统设计说明书](docs/系统设计说明书.md) · [数据库设计](docs/数据库设计.md) · [前端改版方案](docs/前端改版方案.md) · [数据库备份说明](docs/数据库备份说明.md) · [环境搭建与部署](docs/环境搭建与部署.md) · [网络环境说明](docs/网络环境说明.md) |
 | 数据库 | ✅ 11 张表，Flyway 迁移至 v3（`V1__baseline.sql` + `V2__add_user_deleted_at.sql` + `V3__drop_ledger_uk_reversal_once.sql`） |
-| 后端 | ✅ **42 个接口**：认证 9 / 科目 9 / 记账 7 / 预算 9 / 分析 8。账务内核含借贷平衡、余额一致性、幂等、并发安全、部分冲正、账号注销 |
+| 后端 | ✅ **44 个接口**：认证 9 / 科目 9 / 记账 9 / 预算 9 / 分析 8。账务内核含借贷平衡、余额一致性、幂等、并发安全、部分冲正、账号注销 |
 | 前端 | ✅ Vite + Vue 3 单文件组件，**轻量 Claymorphism** 风格，**9 个页面**（登录 / 总览 / 记一笔 / 账目 / 支出分类 / 预算 / 消费分析 / 科目明细 / 账号设置） |
 | 预算模块 | ✅ 总额与分类预算、周/月/自定义周期、滚动结转、预警。AC-08/09 通过 |
 | 消费分析 | ✅ 总览 / 占比 / 趋势 / 同环比 / 贡献度 / 预算执行 / 周期报表 / CSV 导出，ECharts 图表 |
-| 验收测试 | ✅ **287 项全通过**（5 套脚本，覆盖 AC-01 ~ AC-13 全部 13 条） |
+| 验收测试 | ✅ **322 项全通过**（6 套脚本，覆盖 AC-01 ~ AC-13 全部 13 条）+ 85 项 JUnit 单元测试 |
 | 部署（Nginx/HTTPS） | ⬜ 未实现（按计划跳过，见 §未做的部分） |
 | 邮件验证码 / Redis / 数据导入 | ⬜ 未实现（按计划跳过，见 §未做的部分） |
 
@@ -39,7 +39,7 @@
 1. 起 MySQL 并建库
 2. `mvn package`（含 JUnit 单元测试）
 3. 启动应用，等就绪
-4. 依次跑五套 PowerShell 端到端脚本
+4. 依次跑六套 PowerShell 端到端脚本
 
 > **注意**：这份工作流写好了但**尚未真实运行过** —— 项目还没有远程仓库，
 > 也就没有触发过 Actions。首次推送后若失败，先看「Start MySQL」与
@@ -87,6 +87,38 @@ C:\ProgramData\MySQL\MySQL Server 8.0\Data\personal_ledger\      （每表一个
 
 详见 [数据库备份说明](docs/数据库备份说明.md) —— 里面解释了为什么**不该**改 `datadir`，
 以及 `.ibd` 为什么无法单独取用。
+
+## 台账 CSV 导出与导入
+
+「账目」页右上角有「导出台账」与「导入 CSV」，两者共用一种格式（六列）：
+
+```csv
+日期,类型,金额,科目编码,对方账户编码,备注
+2026-10-05,EXPENSE,30.00,50010102,100104,午饭
+2026-10-07,INCOME,800.00,400101,100104,工资
+2026-10-08,TRANSFER,100.00,100104,100101,转存
+```
+
+| 类型 | 科目编码列 | 对方账户编码列 |
+| --- | --- | --- |
+| `EXPENSE` | 费用科目 | 付款账户 |
+| `INCOME` | 收入科目 | 收款账户 |
+| `TRANSFER` | 转出账户 | 转入账户 |
+
+**四条约定**（都是有意为之）：
+
+1. **用科目编码而不是名称**。名称可以改、可以重名；编码才是稳定标识。
+   用名称做导入键的话，用户在界面上改个分类名，昨天的导出文件就导不进去了。
+2. **只覆盖三种交易**。期初余额是账户初始化、冲正是审计修正，都不是
+   可以复制粘贴的交易 —— 导出时已排除，导入时也不接受。
+3. **整份校验通过才写入**。有一行不合格就一条都不写，并返回每行的错误说明。
+   财务数据最怕"导了一半"：用户既不知道导到哪，也不好回退。
+4. **重复导入是安全的**。除幂等键（文件哈希 + 行号）之外还有一层
+   **语义去重**：日期 + 类型 + 金额 + 两个科目 + 备注完全相同的账目会被跳过。
+   所以「从本账号导出、又导回本账号」不会产生重复账目。
+
+> 语义去重的代价：**同一天、同金额、同科目、同备注的两笔真实交易**
+> 只会记进第一笔。遇到这种情况请让备注略有不同，或手工补录。
 
 ## 快速开始
 
@@ -175,12 +207,13 @@ npm run build
 ```powershell
 Set-Location -LiteralPath '<项目>\backend'
 
-# 五套脚本，合计 287 项
+# 六套脚本，合计 322 项
 powershell -ExecutionPolicy Bypass -File .\test-api.ps1              # 69 项  记账核心 + AC-01~06
 powershell -ExecutionPolicy Bypass -File .\test-acceptance.ps1       # 43 项  AC-03/04/05/07/13 + 100 并发
 powershell -ExecutionPolicy Bypass -File .\test-budget.ps1           # 54 项  预算模块 + AC-08/09
 powershell -ExecutionPolicy Bypass -File .\test-analysis.ps1         # 74 项  分析模块 + AC-10/11 + CSV 导出
-powershell -ExecutionPolicy Bypass -File .\test-profile-query.ps1    # 47 项  改密码/改昵称/组合查询/排序/科目明细
+powershell -ExecutionPolicy Bypass -File .\test-profile-query.ps1    # 57 项  改密码/改昵称/组合查询/排序/科目明细
+powershell -ExecutionPolicy Bypass -File .\test-import-export.ps1    # 25 项  台账 CSV 导出与导入
 
 # 两个探索型脚本（无汇总行，逐项打印结果，用于人工核对）
 powershell -ExecutionPolicy Bypass -File .\test-subject-api.ps1      # 科目编码生成、删除约束
@@ -232,7 +265,8 @@ powershell -ExecutionPolicy Bypass -File .\test-delete-account.ps1   # 注销流
 │   ├── test-acceptance.ps1         43 项：AC-03/04/05/07/13 + 并发
 │   ├── test-budget.ps1             54 项：预算 + AC-08/09
 │   ├── test-analysis.ps1           74 项：分析 + AC-10/11 + 导出
-│   ├── test-profile-query.ps1      47 项：改密/昵称/查询/排序/明细
+│   ├── test-profile-query.ps1      57 项：改密/昵称/查询/排序/明细
+│   ├── test-import-export.ps1      25 项：台账 CSV 导出与导入
 │   ├── test-subject-api.ps1        科目编码与删除约束（探索型）
 │   ├── test-delete-account.ps1     账号注销流程（探索型）
 │   └── src/main/

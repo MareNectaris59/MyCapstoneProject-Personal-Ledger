@@ -159,6 +159,69 @@ async function confirmReverse() {
 const canReverse = (row) =>
   row.state === 'POSTED' || row.state === 'PARTIALLY_REVERSED'
 
+/* ---------------- 导入 / 导出 ---------------- */
+
+const importing = ref(false)
+const exporting = ref(false)
+const fileInput = ref(null)
+
+/** 导出当前筛选期间的台账。 */
+async function exportCsv() {
+  exporting.value = true
+  try {
+    const params = {}
+    if (filters.value.startDate) params.startDate = filters.value.startDate
+    if (filters.value.endDate) params.endDate = filters.value.endDate
+    const blob = await api.downloadLedgerCsv(params)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = '账目.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    auth.notify('ok', '已导出')
+  } catch (e) {
+    auth.notify('error', e.message)
+  } finally {
+    exporting.value = false
+  }
+}
+
+function pickFile() {
+  fileInput.value?.click()
+}
+
+/**
+ * 导入 CSV。
+ *
+ * 服务端是"整份校验通过才写入"的语义，所以这里失败时一次性展示前几条错误，
+ * 而不是逐行提示 —— 用户需要的是"整个文件有哪几行不对"，然后改文件重导。
+ */
+async function onFilePicked(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  importing.value = true
+  try {
+    const text = await file.text()
+    const result = await api.importLedgers(text)
+    if (result.errors?.length) {
+      const head = result.errors.slice(0, 5).join('；')
+      const more = result.errors.length > 5 ? `…（共 ${result.errors.length} 处问题）` : ''
+      auth.notify('error', head + more)
+    } else {
+      auth.notify('ok', `导入完成：新增 ${result.imported} 笔，跳过重复 ${result.skipped} 笔`)
+      await Promise.all([load(), auth.loadSubjects()])
+    }
+  } catch (e) {
+    auth.notify('error', e.message)
+  } finally {
+    importing.value = false
+    // 清空 value，否则重复选同一个文件不会触发 change
+    if (event.target) event.target.value = ''
+  }
+}
 onMounted(load)
 </script>
 
@@ -214,6 +277,19 @@ onMounted(load)
           </select>
         </div>
         <button @click="search">查询</button>
+        <button class="btn--ghost" :disabled="exporting" @click="exportCsv">
+          {{ exporting ? '导出中…' : '导出台账' }}
+        </button>
+        <button class="btn--ghost" :disabled="importing" @click="pickFile">
+          {{ importing ? '导入中…' : '导入 CSV' }}
+        </button>
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".csv,text/csv"
+          style="display: none"
+          @change="onFilePicked"
+        />
       </div>
     </div>
   </div>
