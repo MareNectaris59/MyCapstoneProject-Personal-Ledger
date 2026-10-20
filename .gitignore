@@ -66,6 +66,12 @@ db/*.db-shm
 # 转换脚本的 Python 缓存
 db/tools/__pycache__/
 
+# ---- 图片源文件 ----
+# liam_13.jpg 是登录页背景的原始素材：3840x2160，5.05 MB，
+# 而且扩展名是 .jpg、实际内容是 PNG。它已被压缩版
+# frontend/src/assets/login-bg.jpg（2560x1440, 254 KB, JPEG q90）取代，
+# 只保留在本地以便将来重新压缩，不进版本库。
+frontend/src/assets/liam_13.jpg
 # ---- 敏感配置 ----
 # application.yml 里的数据库口令与 JWT 密钥属于开发默认值，
 # 生产环境必须用环境变量覆盖（见 README）。

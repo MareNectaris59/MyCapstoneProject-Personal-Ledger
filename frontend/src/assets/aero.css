@@ -1,0 +1,703 @@
+/* ==========================================================================
+   Frutiger Aero 材质层
+   ==========================================================================
+
+   加载顺序：theme.css → 本文件（见 main.js）。因此这里只做**覆盖**，
+   不改任何布局规则。布局、栅格、表格结构、响应式断点全部沿用 theme.css。
+
+   为什么单独一个文件而不是改 theme.css：
+     这是一次实验性质的风格改造，需要能一键回退。否决时只需
+       1. 删掉本文件
+       2. 去掉 main.js 里的 import
+     即可完整回到 Claymorphism，不必 revert 一堆散落的改动。
+
+   设计依据：项目根目录 `frutiger aero.md`（Frutiger Aero 美学规范）。
+   色板直接取规范 §2 的七个颜色；材质取 §3 的 Aero Glass / Glossy UI /
+   Organic Shapes / Natural Lighting 四条。
+
+   关于素材：规范 §7.2 明确"In the project existing tech stack... 优先使用
+   CSS、CSS Variables、linear-gradient、radial-gradient、box-shadow 和
+   backdrop-filter 实现基础视觉效果"。因此天空、阳光、气泡、水波全部用
+   CSS 渐变与 SVG 实现，不引入任何外部图片 ——
+   既不依赖外链（§7.3 明确"不要依赖大量随机外链图片"），也没有素材授权问题。
+
+   对比度策略（这项最容易在明亮风格里失守）：
+     深蓝文字 #0A3D7A 配白/玻璃底 ≈ 11:1，最安全。
+     次级文字压到 #2F5F92（≈6.7:1）与 #3C6B98（≈5.4:1），都不低于 AA 的 4.5:1。
+     绿色只做装饰与填充，文字级绿色单独压暗到 #17803B（≈5.2:1）。
+     所有玻璃面板背后都保证是浅色（白 + 天空蓝），不会出现"深底浅字"。
+   ========================================================================== */
+
+/* ==========================================================================
+   1. 设计令牌
+   ========================================================================== */
+
+:root {
+  /* ---- 规范 §2 原始色板 ---------------------------------------------- */
+  --aero-sky: #87ceeb;
+  --aero-blue: #1a8cff;
+  --aero-cyan: #59d6dc;
+  --aero-green: #6fdc3c;
+  --aero-white: #ffffff;
+  --aero-bg-light: #f0f8ff;
+  --aero-deep: #0a3d7a;
+
+  /* ---- 语义色 ---------------------------------------------------------
+     primary 比规范里的 #1A8CFF 深一档：那个蓝配白字只有 3.0:1，
+     不满足 AA。压到 #0B6FD6 后白字约 4.9:1，视觉上仍是"Aero 蓝"。 */
+  --primary: #0b6fd6;
+  --primary-dark: #0957a8;
+  --on-primary: #ffffff;
+  --secondary: #59d6dc;
+  --on-secondary: #0a3d7a;
+  --accent: #37b24d;
+  --on-accent: #ffffff;
+  --danger: #d93a3a;
+  --on-danger: #ffffff;
+
+  /* ---- 中性色 --------------------------------------------------------- */
+  --bg: #eaf6ff;
+  --surface: #ffffff;
+  --surface-2: #f2faff;
+  --text: #0a3d7a;
+  --text-muted: #2f5f92;        /* 白底 6.7:1 */
+  --text-faint: #3c6b98;        /* 白底 5.4:1，仍过 AA */
+  --border: rgba(10, 61, 122, 0.13);
+  --border-strong: rgba(10, 61, 122, 0.24);
+  --ring: #1a8cff;
+
+  /* ---- 语义色（状态）-------------------------------------------------- */
+  --success: #17803b;           /* 白底 5.2:1 */
+  --success-bg: #e8f9ee;
+  --warn: #9a5b00;
+  --warn-bg: #fff6e5;
+  --danger-text: #b02a2a;
+  --danger-bg: #ffecec;
+
+  /* ---- 形状 -----------------------------------------------------------
+     Aero 的控件比 Claymorphism 收敛：Vista 时代的按钮圆角约 6-10px，
+     玻璃面板约 12-16px。全部用 999px 会变成"胶囊 SaaS"，不是 Aero。 */
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 7px;
+  --radius-pill: 999px;
+
+  /* ---- 材质：阴影视差 ------------------------------------------------
+     关键区别：Claymorphism 是"外阴影带蓝色、内阴影是受光面"；
+     Aero 是"外层柔和投影 + 内层顶部一道白色高光 + 底部一道浅蓝反射"。
+     所以内阴影从"整体受光"改成"顶白底蓝"的双向边。 */
+  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.95),
+                  inset 0 -1px 0 rgba(10, 61, 122, 0.06);
+  --shadow-outer: 0 10px 26px rgba(10, 61, 122, 0.13),
+                  0 2px 6px rgba(10, 61, 122, 0.08);
+  --shadow-outer-sm: 0 4px 12px rgba(10, 61, 122, 0.10);
+  --shadow-outer-lg: 0 18px 44px rgba(10, 61, 122, 0.18);
+  --shadow-inset: inset 0 2px 5px rgba(10, 61, 122, 0.10),
+                  inset 0 -1px 0 rgba(255, 255, 255, 0.9);
+
+  --clay: var(--shadow-inner), var(--shadow-outer);
+  --clay-sm: var(--shadow-inner), var(--shadow-outer-sm);
+  --clay-lg: var(--shadow-inner), var(--shadow-outer-lg);
+
+  /* ---- 亮面（Glossy）------------------------------------------------
+     一条"上白下透明"的渐变，叠在有色背景上就是经典 Vista 按钮的高光带。 */
+  --gloss-strong: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0.55) 44%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  --gloss-soft: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.85) 0%,
+    rgba(255, 255, 255, 0.28) 46%,
+    rgba(255, 255, 255, 0) 100%
+  );
+
+  /* ---- 字体：规范 §5 指定 Segoe UI / Nunito Sans + 中文回退 ----------
+     Segoe UI 是 Windows 自带，不需要下载。中文回退到雅黑 UI。 */
+  --font-sans: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei',
+               'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+
+  /* ---- 动效：规范 §6 要求"自然平滑"，不要剧烈弹跳 -------------------
+     原 Claymorphism 用带过冲的 bounce 曲线；Aero 换成标准缓出。 */
+  --ease-bounce: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --t-fast: 140ms;
+  --t-press: 180ms;
+  --t-base: 260ms;
+}
+
+/* ==========================================================================
+   2. 天空与气泡（有机形状 + 自然光照）
+   ========================================================================== */
+
+body {
+  background:
+    /* 右上角的阳光光晕 */
+    radial-gradient(circle at 82% 6%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 42%),
+    /* 左下的草地反光，作为自然元素的暗示 */
+    radial-gradient(circle at 8% 94%, rgba(111, 220, 60, 0.16) 0%, rgba(111, 220, 60, 0) 40%),
+    /* 天空本身：上蓝下白 */
+    linear-gradient(180deg, #9dd7f2 0%, #c4e8fa 26%, #e3f4fd 56%, #f6fcff 100%);
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+/* 气泡层：三层不同尺寸、不同速度，形成层次（规范 §3 要求"不要所有组件
+   都是同一个玻璃效果，靠前后层次建立深度"）。
+   全部 pointer-events: none，且 z-index: -1 让它落在内容之后。 */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: -10%;
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: no-repeat;
+}
+
+body::before {
+  background-image:
+    radial-gradient(circle at 14% 24%, rgba(255, 255, 255, 0.85) 0 14px, rgba(255, 255, 255, 0) 15px),
+    radial-gradient(circle at 22% 62%, rgba(255, 255, 255, 0.55) 0 26px, rgba(255, 255, 255, 0) 27px),
+    radial-gradient(circle at 68% 18%, rgba(255, 255, 255, 0.70) 0 9px, rgba(255, 255, 255, 0) 10px),
+    radial-gradient(circle at 88% 54%, rgba(255, 255, 255, 0.60) 0 34px, rgba(255, 255, 255, 0) 35px),
+    radial-gradient(circle at 44% 86%, rgba(255, 255, 255, 0.50) 0 18px, rgba(255, 255, 255, 0) 19px);
+  animation: aero-drift-a 34s ease-in-out infinite alternate;
+}
+
+body::after {
+  background-image:
+    radial-gradient(circle at 6% 78%, rgba(89, 214, 220, 0.35) 0 40px, rgba(89, 214, 220, 0) 41px),
+    radial-gradient(circle at 78% 82%, rgba(89, 214, 220, 0.28) 0 22px, rgba(89, 214, 220, 0) 23px),
+    radial-gradient(circle at 58% 44%, rgba(26, 140, 255, 0.10) 0 60px, rgba(26, 140, 255, 0) 61px);
+  filter: blur(0.4px);
+  animation: aero-drift-b 46s ease-in-out infinite alternate;
+}
+
+/* 幅度刻意很小：规范 §6 要求"低频率、低幅度"，避免分散注意力 */
+@keyframes aero-drift-a {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(10px, -16px, 0); }
+}
+@keyframes aero-drift-b {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-14px, 10px, 0); }
+}
+
+/* 主内容区必须透明，让天空透上来 */
+.main,
+.layout {
+  background: transparent;
+}
+
+/* ==========================================================================
+   3. Aero Glass：侧边栏
+   ========================================================================== */
+
+.sidebar {
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(226, 245, 255, 0.66) 100%);
+  backdrop-filter: blur(20px) saturate(165%);
+  -webkit-backdrop-filter: blur(20px) saturate(165%);
+  /* 右侧一道白边 + 外侧淡蓝投影，是玻璃与背景之间的"厚边" */
+  border-right: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset -1px 0 0 rgba(10, 61, 122, 0.07),
+    8px 0 26px rgba(10, 61, 122, 0.09);
+}
+
+.sidebar__brand {
+  color: var(--aero-deep);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.sidebar__link {
+  border-radius: var(--radius-sm);
+  transition: background var(--t-fast) ease, box-shadow var(--t-fast) ease,
+              color var(--t-fast) ease;
+}
+
+.sidebar__link:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(233, 247, 255, 0.75));
+  box-shadow: inset 0 1px 0 #fff, 0 2px 6px rgba(10, 61, 122, 0.08);
+}
+
+/* 当前项：Aero 蓝的亮面胶囊，顶部高光 + 底部内阴影，像 Vista 的选中按钮 */
+.sidebar__link.router-link-active {
+  color: var(--on-primary);
+  background:
+    var(--gloss-strong),
+    linear-gradient(180deg, #3aa0ff 0%, var(--primary) 58%, #0a5fbe 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -2px 4px rgba(5, 45, 95, 0.30),
+    0 4px 12px rgba(11, 111, 214, 0.35);
+  text-shadow: 0 1px 1px rgba(4, 40, 84, 0.45);
+}
+
+.sidebar__who {
+  border-top: 1px solid rgba(255, 255, 255, 0.8);
+  color: var(--text);
+}
+
+/* ==========================================================================
+   4. 面板与卡片：亮面玻璃
+   ========================================================================== */
+
+.panel,
+.stat {
+  /* 两层背景：上层是顶部高光带（不能遮住文字，所以做成背景而不是伪元素） */
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, #ffffff 0%, #f4fbff 100%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  /* 第三层用 0 0 0 1px 补一道极淡的蓝边，模拟玻璃的折射轮廓 */
+  box-shadow:
+    0 0 0 1px rgba(10, 61, 122, 0.06),
+    0 12px 30px rgba(10, 61, 122, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.panel__head {
+  border-bottom: 1px solid rgba(10, 61, 122, 0.08);
+  color: var(--aero-deep);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.page-head h2 {
+  color: var(--aero-deep);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.stat__label { color: var(--text-muted); }
+.stat__value { color: var(--aero-deep); }
+
+/* ==========================================================================
+   5. 按钮：Glossy UI
+   ========================================================================== */
+
+/* 主按钮：Aero 蓝渐变 + 顶部高光 + 底部内阴影 + 外投影 */
+button,
+.btn {
+  border-radius: var(--radius-sm);
+  background:
+    var(--gloss-strong),
+    linear-gradient(180deg, #45a4ff 0%, var(--primary) 52%, #0a5ec0 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -2px 5px rgba(5, 45, 95, 0.28),
+    0 3px 9px rgba(10, 61, 122, 0.20);
+  text-shadow: 0 1px 1px rgba(4, 40, 84, 0.35);
+  transition: filter var(--t-fast) ease, transform var(--t-press) ease,
+              box-shadow var(--t-press) ease;
+}
+
+/* 悬停：提亮而不是整体换色，这样高光带的位置不会跳 */
+button:hover:not(:disabled),
+.btn:hover:not(:disabled) {
+  background:
+    var(--gloss-strong),
+    linear-gradient(180deg, #45a4ff 0%, var(--primary) 52%, #0a5ec0 100%);
+  filter: brightness(1.08);
+}
+
+/* 按下：轻微压下 + 高光减弱（规范 §6 要求"轻微的压下反馈"，不要缩放弹跳） */
+button:active:not(:disabled),
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 2px 6px rgba(5, 45, 95, 0.35),
+    0 1px 2px rgba(10, 61, 122, 0.15);
+  filter: brightness(0.97);
+}
+
+button:disabled {
+  background: linear-gradient(180deg, #e8f1f8 0%, #d8e6f1 100%);
+  color: #7d97ae;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  text-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+/* 次要按钮：白玻璃，带淡蓝边 */
+.btn--ghost {
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, #ffffff 0%, #eef8ff 100%);
+  color: var(--text);
+  border: 1px solid rgba(10, 61, 122, 0.16);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 2px 6px rgba(10, 61, 122, 0.09);
+  text-shadow: none;
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, #ffffff 0%, #e3f4ff 100%);
+  filter: brightness(1.02);
+}
+
+.btn--danger {
+  background:
+    var(--gloss-strong),
+    linear-gradient(180deg, #f06666 0%, var(--danger) 55%, #b02a2a 100%);
+  color: var(--on-danger);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background:
+    var(--gloss-strong),
+    linear-gradient(180deg, #f06666 0%, var(--danger) 55%, #b02a2a 100%);
+}
+
+/* ==========================================================================
+   6. 表单：内凹玻璃槽
+   ========================================================================== */
+
+input,
+select,
+textarea {
+  background:
+    linear-gradient(180deg, #eef8ff 0%, #ffffff 22%);
+  border: 1px solid var(--border-strong);
+  /* 顶部内阴影 = 凹槽；底部一道白线 = 槽口高光 */
+  box-shadow:
+    inset 0 2px 4px rgba(10, 61, 122, 0.09),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* 聚焦：Aero 蓝光圈 + 极淡外发光 */
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--aero-blue);
+  box-shadow:
+    inset 0 2px 4px rgba(10, 61, 122, 0.08),
+    0 0 0 3px rgba(26, 140, 255, 0.22),
+    0 0 12px rgba(26, 140, 255, 0.25);
+}
+
+input::placeholder,
+option:disabled,
+select.is-placeholder {
+  color: #7d97ae;
+}
+
+/* ==========================================================================
+   7. 表格
+   ========================================================================== */
+
+th {
+  color: var(--text-muted);
+  background: linear-gradient(180deg, rgba(226, 245, 255, 0.9), rgba(240, 250, 255, 0.6));
+  border-bottom: 1px solid var(--border-strong);
+}
+
+td { border-bottom: 1px solid rgba(10, 61, 122, 0.07); }
+
+tbody tr:hover {
+  background: linear-gradient(180deg, rgba(233, 247, 255, 0.9), rgba(245, 252, 255, 0.9));
+}
+
+/* ==========================================================================
+   8. 标签：玻璃胶囊
+   ========================================================================== */
+
+.tag {
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 3px rgba(10, 61, 122, 0.10);
+}
+
+/* ==========================================================================
+   9. 预算进度条与趋势柱
+   ========================================================================== */
+
+.bar {
+  background: linear-gradient(180deg, #dcecf8 0%, #eef8ff 100%);
+  box-shadow: inset 0 2px 4px rgba(10, 61, 122, 0.14);
+  border-radius: var(--radius-pill);
+}
+
+/* 进度条填充：水面/气泡的观感 —— 亮青到 Aero 蓝，顶部一道白高光 */
+.bar__fill {
+  background:
+    var(--gloss-strong),
+    linear-gradient(90deg, var(--aero-cyan) 0%, var(--aero-blue) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.bar__fill--warn {
+  background:
+    var(--gloss-strong),
+    linear-gradient(90deg, #ffd166 0%, #f0a72c 100%);
+}
+
+.bar__fill--danger {
+  background:
+    var(--gloss-strong),
+    linear-gradient(90deg, #ff8b8b 0%, var(--danger) 100%);
+}
+
+.trend__bar {
+  background:
+    var(--gloss-strong),
+    linear-gradient(180deg, #6fc4ff 0%, var(--primary) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+/* ==========================================================================
+   10. 提示 / Toast / 分页
+   ========================================================================== */
+
+.alert {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 3px 10px rgba(10, 61, 122, 0.08);
+}
+
+.toast {
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(240, 250, 255, 0.97));
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 10px 28px rgba(10, 61, 122, 0.20);
+}
+
+.pager button {
+  border-radius: var(--radius-xs);
+}
+
+/* ==========================================================================
+   11. 登录页：Aero 壁纸 + 玻璃卡片
+   ========================================================================== */
+
+/* 背景换成丝绸光带那张 Aero 壁纸：中等纯蓝底、半透明飘带、
+   左上角气泡散景、右下一条极亮的白色光带。
+
+   先量化再调，不凭手感（实测 2560x1440）：
+     整体   #5984CD  亮度 128/255
+     左上   #4C78C4  116      右上 #5F90DB 139
+     正中   #6996DD  146  ← 最亮，而卡片正好压在这里
+     左下   #5B86CF  130      右下 #5D81C4 126
+
+   两个结论直接决定叠层方向：
+     1. 它比上一张（深青、亮度约 60）亮一倍，**不能用重暗角**，否则会闷。
+     2. 正中是全图最亮的区域，**中心不能再加白光** ——
+        那会把飘带细节糊掉，卡片也会陷进背景里。
+   所以改成：轻度暗角做纵深 + 顶部一点点湖青提色温，
+   卡片的分离度靠"更强的外投影"而不是"更白"来解决。 */
+
+.auth {
+  background:
+    /* 1. 中心极淡提亮（只有 9%）：够把视线收拢，又不糊掉飘带 */
+    radial-gradient(ellipse 58% 58% at 50% 44%,
+                    rgba(255, 255, 255, 0.09) 0%,
+                    rgba(255, 255, 255, 0) 74%),
+    /* 2. 轻度暗角（38%）：比上一版的 52% 轻得多，这图本身够亮 */
+    radial-gradient(ellipse 96% 96% at 50% 50%,
+                    rgba(6, 30, 66, 0) 48%,
+                    rgba(6, 30, 66, 0.38) 100%),
+    /* 3. 顶部湖青、底部略沉：把色温拉向 Aero，同时给底部压一点重量 */
+    linear-gradient(180deg,
+                    rgba(89, 214, 220, 0.12) 0%,
+                    rgba(26, 140, 255, 0.04) 50%,
+                    rgba(4, 24, 52, 0.16) 100%),
+    /* 4. 壁纸本身 */
+    url('./login-bg.jpg') center / cover no-repeat,
+    /* 5. 兜底色取全图平均色 #5984CD，加载完成前后不会跳色 */
+    #5984cd;
+}
+
+/* 登录卡片：背后是中等亮度的蓝。
+   刻意**不**再降低透明度 —— 深底上透明度能换来"玻璃感"，
+   但在这张亮蓝上只会让卡片变灰、丢掉轮廓。
+   分离度改由外投影承担：一圈 1px 深色描边 + 大面积柔和暗影，
+   卡片就会从亮蓝背景上"浮"起来。 */
+.auth__box {
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(240, 249, 255, 0.92) 100%);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.98);
+  box-shadow:
+    /* 顶部一道亮边 + 内侧一圈极淡的青光，模拟玻璃边缘的折射 */
+    inset 0 1px 0 #fff,
+    inset 0 0 0 1px rgba(200, 240, 255, 0.55),
+    0 0 0 1px rgba(8, 34, 72, 0.16),
+    0 28px 64px rgba(8, 34, 72, 0.42);
+}
+
+.auth__title {
+  color: var(--aero-deep);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* ==========================================================================
+   12. 无障碍与响应式（规范 §6 / §7.7 / §7.8）
+   ========================================================================== */
+
+/* 尊重系统的"减少动态效果"设置：停掉气泡漂移与所有过渡 */
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  body::after {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* 窄屏：backdrop-filter 在低端移动设备上开销较大，
+   且侧边栏在窄屏下会占满宽度，玻璃效果的收益很小，直接退回不透明底。 */
+@media (max-width: 720px) {
+  .sidebar {
+    background: linear-gradient(180deg, #ffffff 0%, #eef8ff 100%);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .auth__box {
+    background: #ffffff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+/* ==========================================================================
+   13. 天平组件（记账页的"讲故事的组件"）
+   ========================================================================== */
+
+/* 原版是"左上一个白受光面 + 右下投影"的黏土块；换成玻璃托盘：
+   白到淡蓝的垂直渐变 + 顶部高光，边缘用 aero 蓝描一道细线。 */
+.scale {
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, rgba(240, 250, 255, 0.95) 0%, rgba(255, 255, 255, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(10, 61, 122, 0.06),
+    0 8px 22px rgba(10, 61, 122, 0.10),
+    inset 0 1px 0 #fff;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* 两栏做成两块玻璃托盘，靠边框区分而不是靠底色深浅 */
+.scale__col {
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(233, 247, 255, 0.85) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 2px 8px rgba(10, 61, 122, 0.07);
+}
+
+/* 平衡态用清新绿、不平衡用红，都做亮面处理 */
+.scale--balanced .scale__col {
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, rgba(240, 253, 244, 0.95) 0%, rgba(220, 247, 228, 0.9) 100%);
+  border-color: rgba(23, 128, 59, 0.28);
+}
+
+.scale--unbalanced .scale__col {
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, rgba(255, 242, 242, 0.95) 0%, rgba(255, 226, 226, 0.9) 100%);
+  border-color: rgba(176, 42, 42, 0.28);
+}
+
+.scale--balanced .scale__verdict { color: var(--success); }
+.scale--unbalanced .scale__verdict { color: var(--danger-text); }
+
+/* ==========================================================================
+   14. 预算卡与危险区
+   ========================================================================== */
+
+.budget {
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, #ffffff 0%, #f4fbff 100%);
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(10, 61, 122, 0.05),
+    0 6px 18px rgba(10, 61, 122, 0.08),
+    inset 0 1px 0 #fff;
+}
+
+.danger-zone {
+  background:
+    var(--gloss-soft),
+    linear-gradient(180deg, rgba(255, 245, 245, 0.97) 0%, rgba(255, 236, 236, 0.95) 100%);
+  border: 1px solid rgba(217, 58, 58, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 6px 18px rgba(176, 42, 42, 0.08);
+}
+
+/* ==========================================================================
+   15. 滚动条
+   ========================================================================== */
+
+/* 侧边栏可滚动（导航项多时）。默认滚动条在玻璃面板上非常突兀，
+   收窄并做成半透明的蓝灰色，悬停时才加深。 */
+.sidebar::-webkit-scrollbar,
+.main::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.main::-webkit-scrollbar-thumb {
+  background: rgba(10, 61, 122, 0.16);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover,
+.main::-webkit-scrollbar-thumb:hover {
+  background: rgba(10, 61, 122, 0.30);
+  background-clip: content-box;
+}
+
+/* Firefox 走标准属性，两个引擎不必一致，只要都不突兀 */
+.sidebar,
+.main {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(10, 61, 122, 0.22) transparent;
+}
+
+/* ==========================================================================
+   16. 表格内的等宽数字与金额高亮
+   ========================================================================== */
+
+/* 金额是记账软件最重要的数字。给它一点极淡的蓝色底衬，
+   让视线先落在金额列上 —— 这是原主题"金额要醒目"约定的延续。 */
+td.num {
+  color: var(--aero-deep);
+  font-weight: 600;
+}
