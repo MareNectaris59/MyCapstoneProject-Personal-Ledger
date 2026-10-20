@@ -585,6 +585,26 @@ List<Entry> originalEntries = listEntries(ledgerId);
      * 对记账接口而言这正是我们想要的语义：重复提交不会重复记账，
      * 而返回的凭证内容与首次一致（凭证 0 落库后不可变）。
      */
+    /**
+     * 判断某个幂等键是否已经落过帐。
+     *
+     * <p>定期记账的补跑逻辑需要它：循环里要区分「真正新生成了一条」
+     * 与「这一期之前已经记过」—— 前者计入 generated，后者计入 skipped。
+     * 若直接调 postXxx，两种情况都返回同一张凭证，无法区分。
+     *
+     * <p>与 {@link #findExistingByKey} 分开而不合并，是因为后者会打一条
+     * 「幂等命中」日志 —— 对接口重放是有用的，
+     * 但定期任务每天扫描时会刷屏。
+     */
+    public boolean existsByKey(Long userId, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return false;
+        }
+        return ledgerMapper.selectCount(new LambdaQueryWrapper<Ledger>()
+                .eq(Ledger::getUserId, userId)
+                .eq(Ledger::getIdempotencyKey, idempotencyKey)) > 0;
+    }
+
     private Ledger findExistingByKey(Long userId, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return null;

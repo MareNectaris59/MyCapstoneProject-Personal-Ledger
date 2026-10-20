@@ -11,11 +11,11 @@
 | --- | --- |
 | 设计文档 | ✅ [系统设计说明书](docs/系统设计说明书.md) · [数据库设计](docs/数据库设计.md) · [前端改版方案](docs/前端改版方案.md) · [数据库备份说明](docs/数据库备份说明.md) · [环境搭建与部署](docs/环境搭建与部署.md) · [网络环境说明](docs/网络环境说明.md) · [单元测试说明](docs/单元测试说明.md) |
 | 数据库 | ✅ 11 张表，Flyway 迁移至 v3（`V1__baseline.sql` + `V2__add_user_deleted_at.sql` + `V3__drop_ledger_uk_reversal_once.sql`） |
-| 后端 | ✅ **44 个接口**：认证 9 / 科目 9 / 记账 9 / 预算 9 / 分析 8。账务内核含借贷平衡、余额一致性、幂等、并发安全、部分冲正、账号注销 |
+| 后端 | ✅ **49 个接口**：认证 9 / 科目 9 / 记账 9 / 预算 9 / 分析 8 / 定期 5。账务内核含借贷平衡、余额一致性、幂等、并发安全、部分冲正、账号注销 |
 | 前端 | ✅ Vite + Vue 3 单文件组件，**轻量 Claymorphism** 风格，**9 个页面**（登录 / 总览 / 记一笔 / 账目 / 支出分类 / 预算 / 消费分析 / 科目明细 / 账号设置） |
 | 预算模块 | ✅ 总额与分类预算、周/月/自定义周期、滚动结转、预警。AC-08/09 通过 |
 | 消费分析 | ✅ 总览 / 占比 / 趋势 / 同环比 / 贡献度 / 预算执行 / 周期报表 / CSV 导出，ECharts 图表 |
-| 验收测试 | ✅ **322 项全通过**（6 套脚本，覆盖 AC-01 ~ AC-13 全部 13 条）+ 85 项 JUnit 单元测试 |
+| 验收测试 | ✅ **377 项全通过**（7 套脚本，覆盖 AC-01 ~ AC-13 全部 13 条）+ 115 项 JUnit 单元测试 |
 | 部署（Nginx/HTTPS） | ⬜ 未实现（按计划跳过，见 §未做的部分） |
 | 邮件验证码 / Redis / 数据导入 | ⬜ 未实现（按计划跳过，见 §未做的部分） |
 
@@ -39,7 +39,7 @@
 1. 起 MySQL 并建库
 2. `mvn package`（含 JUnit 单元测试）
 3. 启动应用，等就绪
-4. 依次跑六套 PowerShell 端到端脚本
+4. 依次跑七套 PowerShell 端到端脚本
 
 > **注意**：这份工作流写好了但**尚未真实运行过** —— 项目还没有远程仓库，
 > 也就没有触发过 Actions。首次推送后若失败，先看「Start MySQL」与
@@ -207,13 +207,14 @@ npm run build
 ```powershell
 Set-Location -LiteralPath '<项目>\backend'
 
-# 六套脚本，合计 322 项
+# 七套脚本，合计 377 项
 powershell -ExecutionPolicy Bypass -File .\test-api.ps1              # 69 项  记账核心 + AC-01~06
 powershell -ExecutionPolicy Bypass -File .\test-acceptance.ps1       # 43 项  AC-03/04/05/07/13 + 100 并发
 powershell -ExecutionPolicy Bypass -File .\test-budget.ps1           # 54 项  预算模块 + AC-08/09
 powershell -ExecutionPolicy Bypass -File .\test-analysis.ps1         # 74 项  分析模块 + AC-10/11 + CSV 导出
 powershell -ExecutionPolicy Bypass -File .\test-profile-query.ps1    # 57 项  改密码/改昵称/组合查询/排序/科目明细
 powershell -ExecutionPolicy Bypass -File .\test-import-export.ps1    # 25 项  台账 CSV 导出与导入
+powershell -ExecutionPolicy Bypass -File .\test-recurring.ps1         # 39 项  定期记账
 
 # 两个探索型脚本（无汇总行，逐项打印结果，用于人工核对）
 powershell -ExecutionPolicy Bypass -File .\test-subject-api.ps1      # 科目编码生成、删除约束
@@ -270,6 +271,7 @@ powershell -ExecutionPolicy Bypass -File .\test-delete-account.ps1   # 注销流
 │   ├── test-analysis.ps1           74 项：分析 + AC-10/11 + 导出
 │   ├── test-profile-query.ps1      57 项：改密/昵称/查询/排序/明细
 │   ├── test-import-export.ps1      25 项：台账 CSV 导出与导入
+│   ├── test-recurring.ps1          39 项：定期记账
 │   ├── test-subject-api.ps1        科目编码与删除约束（探索型）
 │   ├── test-delete-account.ps1     账号注销流程（探索型）
 │   └── src/main/

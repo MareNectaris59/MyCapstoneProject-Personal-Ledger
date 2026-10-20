@@ -25,6 +25,7 @@ const navItems = [
   { to: '/ledgers', label: '账目' },
   { to: '/categories', label: '支出分类' },
   { to: '/budgets', label: '预算' },
+  { to: '/recurring', label: '定期记账' },
   { to: '/analysis', label: '消费分析' },
   { to: '/settings', label: '账号设置' }
 ]

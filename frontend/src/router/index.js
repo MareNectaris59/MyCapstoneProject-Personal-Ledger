@@ -53,6 +53,12 @@ const routes = [
     meta: { title: '预算' }
   },
   {
+    path: '/recurring',
+    name: 'recurring',
+    component: () => import('@/views/RecurringView.vue'),
+    meta: { title: '定期记账' }
+  },
+  {
     path: '/analysis',
     name: 'analysis',
     component: () => import('@/views/AnalysisView.vue'),

@@ -134,6 +134,15 @@ export const api = {
   postTransfer: (payload) => http.post('/ledgers/transfer', payload),
   ledgers: (params) => http.get('/ledgers', { params }),
 
+  /* ---------------- 定期记账 ---------------- */
+
+  recurringList: () => http.get('/recurring'),
+  recurringCreate: (body) => http.post('/recurring', body),
+  recurringUpdate: (id, body) => http.put(`/recurring/${id}`, body),
+  recurringDelete: (id) => http.delete(`/recurring/${id}`),
+  /** 立即执行到期的规则（不必等到凌晨） */
+  recurringRun: () => http.post('/recurring/run'),
+
   /**
    * 导入台账 CSV。
    *
