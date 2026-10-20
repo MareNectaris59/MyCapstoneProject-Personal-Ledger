@@ -560,6 +560,29 @@ tbody tr:hover {
     #5984cd;
 }
 
+/* 右缘渐隐：把壁纸**溶进**面板的起始色，而不是让它在某一条像素上断掉。
+
+   直接"图 | 白"拼接的问题不在于配色，而在于边界是一条硬线 ——
+   眼睛会把两侧当成两个不相干的矩形。让图在最后 16% 的宽度里
+   逐渐变成面板的起始色（#e8f2fc），再接上下面面板的同色渐变，
+   两侧在接缝处就是同一个颜色，边界自然消失。
+
+   为什么不用纯白做渐隐：那样图会先变白、面板再从浅蓝起头，
+   等于在接缝处又制造一次色阶跳变，问题只是换了个位置。 */
+.auth__art::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 16%;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+                              rgba(232, 242, 252, 0) 0%,
+                              rgba(232, 242, 252, 0.6) 58%,
+                              #e8f2fc 100%);
+}
+
 .auth__artInner {
   position: relative;
   color: #fff;
@@ -583,14 +606,25 @@ tbody tr:hover {
 /* 右侧：表单落在纯白面板上。
    分栏的真正理由在这里 —— 表单需要稳定的高对比度，
    而壁纸亮度不可控。白色面板 + 深蓝字，输入框与报错都不会看不清。 */
+/* 面板从接缝色渐变到纯白。
+
+   起点 #e8f2fc 与上面 .auth__art::after 的终点完全一致，
+   到 26% 处已经是纯白（面板约 580px 宽时约 150px 的过渡带）。
+   这样右半部分是白底（表单可读性不受影响），
+   左缘却承接了壁纸的蓝，视觉上是从图里"长"出来的。 */
 .auth__panel {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 48px 40px;
-  background: #fff;
-  /* 一道极淡的向左投影，让白面板从壁纸上"立"起来 */
-  box-shadow: -18px 0 40px rgba(8, 34, 72, 0.10);
+  background:
+    linear-gradient(90deg,
+                    #e8f2fc 0%,
+                    #f4f9ff 11%,
+                    #ffffff 26%),
+    #fff;
+  /* 投影收窄收淡：接缝已经被颜色过渡接管，阴影只需补一点纵深 */
+  box-shadow: -12px 0 32px rgba(8, 34, 72, 0.07);
 }
 
 .auth__form {
@@ -634,32 +668,51 @@ tbody tr:hover {
 
 /* 显示/隐藏密码。button 在 theme.css 里有渐变底与阴影，
    这里要全部撤掉，只留一个可点的图标区。 */
-.auth__eye {
+/* 显示/隐藏密码。
+
+   ⚠️ 这里的选择器为什么这么长：全局规则里有
+     button:hover:not(:disabled) { background: <蓝色渐变> }
+   它的特异性是 (0,2,1)，而普通的 `.auth__eye:hover` 只有 (0,2,0) --
+   于是"无背景"只在非悬停时成立，一悬停蓝渐变就回来了。
+   这正是用户看到的现象。
+
+   所以悬停与按下两态都要显式覆盖，并把特异性提到 (0,4,0)：
+   .auth__input .auth__eye:hover:not(:disabled)
+   同时把全局按钮的过渡、内阴影、按下位移一并撤掉，
+   让它彻底退化成"一个透明可点的图标"，不参与按钮的视觉语言。 */
+.auth__input .auth__eye,
+.auth__input .auth__eye:hover:not(:disabled),
+.auth__input .auth__eye:active:not(:disabled) {
   position: absolute;
   right: 6px;
   top: 50%;
   width: 32px;
   height: 32px;
+  min-height: 0;
   display: grid;
   place-items: center;
   transform: translateY(-50%);
   padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 0;
   background: none;
   box-shadow: none;
+  filter: none;
+  text-shadow: none;
+  transition: none;
   color: var(--text-faint);
   cursor: pointer;
 }
 
-.auth__eye:hover {
+/* 只保留颜色变化作为"可点"的提示，且不加过渡（无动效） */
+.auth__input .auth__eye:hover:not(:disabled) {
   color: var(--primary);
-  background: rgba(11, 111, 214, 0.07);
 }
 
 .auth__eye svg {
   width: 18px;
   height: 18px;
+  display: block;
 }
 
 /* ==========================================================================
