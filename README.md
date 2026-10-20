@@ -9,7 +9,7 @@
 
 | 部分 | 状态 |
 | --- | --- |
-| 设计文档 | ✅ [系统设计说明书](docs/系统设计说明书.md) · [数据库设计](docs/数据库设计.md) · [前端改版方案](docs/前端改版方案.md) · [数据库备份说明](docs/数据库备份说明.md) · [环境搭建与部署](docs/环境搭建与部署.md) · [网络环境说明](docs/网络环境说明.md) |
+| 设计文档 | ✅ [系统设计说明书](docs/系统设计说明书.md) · [数据库设计](docs/数据库设计.md) · [前端改版方案](docs/前端改版方案.md) · [数据库备份说明](docs/数据库备份说明.md) · [环境搭建与部署](docs/环境搭建与部署.md) · [网络环境说明](docs/网络环境说明.md) · [单元测试说明](docs/单元测试说明.md) |
 | 数据库 | ✅ 11 张表，Flyway 迁移至 v3（`V1__baseline.sql` + `V2__add_user_deleted_at.sql` + `V3__drop_ledger_uk_reversal_once.sql`） |
 | 后端 | ✅ **44 个接口**：认证 9 / 科目 9 / 记账 9 / 预算 9 / 分析 8。账务内核含借贷平衡、余额一致性、幂等、并发安全、部分冲正、账号注销 |
 | 前端 | ✅ Vite + Vue 3 单文件组件，**轻量 Claymorphism** 风格，**9 个页面**（登录 / 总览 / 记一笔 / 账目 / 支出分类 / 预算 / 消费分析 / 科目明细 / 账号设置） |
@@ -219,6 +219,9 @@ powershell -ExecutionPolicy Bypass -File .\test-import-export.ps1    # 25 项  �
 powershell -ExecutionPolicy Bypass -File .\test-subject-api.ps1      # 科目编码生成、删除约束
 powershell -ExecutionPolicy Bypass -File .\test-delete-account.ps1   # 注销流程
 ```
+
+**单元测试**：`mvn -f backend/pom.xml test` 运行 85 项（无需数据库）。
+测试清单、每条测什么、以及这些测试真实发现的缺陷，见 [单元测试说明](docs/单元测试说明.md)。
 
 **验收标准 AC-01 ~ AC-13 全部 13 条均有对应断言。** 改完任何一处账务逻辑，
 至少要把前五套跑到全绿。
