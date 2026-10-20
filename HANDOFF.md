@@ -28,12 +28,12 @@ Get-Content README.md -TotalCount 40
 | 项 | 现状 |
 | --- | --- |
 | 工作目录 | `D:\Capstone Project` |
-| 分支 / HEAD | `main` / `7f8153d`（唯一长期分支，实验分支已合并删除） |
-| 提交数 | 16 |
-| 跟踪文件 | 131 个（约 1.5 MB） |
+| 分支 / HEAD | `main` / `2c8cc5e`（唯一长期分支，Aero 实验分支已合并删除） |
+| 提交数 | 28 |
+| 跟踪文件 | 149 个（约 1.7 MB） |
 | 工具链 | JDK 17.0.7、Maven 3.9.3、MySQL 8.0.31、Node v26.11.1 |
-| 数据库 | `personal_ledger`，Flyway 已迁移至 **v3** |
-| 后端测试 | **五套 287 项全通过**（69 + 43 + 54 + 74 + 47），AC-01~13 全覆盖 |
+| 数据库 | `personal_ledger`，Flyway 已迁移至 **v4** |
+| 后端测试 | **单元测试 85 项 + 端到端六套 322 项全通过**，AC-01~13 全覆盖 |
 
 **已完成**：设计文档 / 数据库 / 记账内核（分录、平衡校验、反向撤销、三层幂等、并发安全）/
 账号注销 / 科目增删改 / 改密码 / 改昵称 / 账目组合查询与排序 / 科目明细页 /
@@ -232,12 +232,14 @@ mvn -B -f 'D:\Capstone Project\backend\pom.xml' clean package -DskipTests
 # 2. 启动
 & java '-Dfile.encoding=UTF-8' -jar 'D:\Capstone Project\backend\target\personal-ledger-1.0.0-SNAPSHOT.jar'
 
-# 3. 轮询就绪后跑五套测试（合计 287 项，全绿才算通过）
+# 3. 轮询就绪后跑六套测试（合计 322 项，全绿才算通过）
+mvn -B -f 'D:\Capstone Project\backend\pom.xml' test   # 单元测试 85 项
 powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-api.ps1'              # 69 项
 powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-acceptance.ps1'       # 43 项
 powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-budget.ps1'           # 54 项
 powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-analysis.ps1'         # 74 项
-powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-profile-query.ps1'    # 47 项
+powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-profile-query.ps1'    # 57 项
+powershell -ExecutionPolicy Bypass -File 'D:\Capstone Project\backend\test-import-export.ps1'    # 25 项
 ```
 
 改前端时**必须重新 `npm run build`**（产物输出到
