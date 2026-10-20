@@ -476,7 +476,29 @@ tbody tr:hover {
   box-shadow:
     inset 0 1px 0 #fff,
     0 10px 28px rgba(10, 61, 122, 0.20);
+
+  /* ------------------------------------------------------------------------
+     文字必须显式改回深蓝。
+
+     theme.css 里 .toast--ok / .toast--error 原本是"实色底 + 白字"
+     （background: var(--success)/var(--danger); color: #fff）。
+     这里把背景换成了白玻璃，但**没有覆盖 color** —— 于是白字落在白底上，
+     "记账成功 · 单据号 LE…" 完全看不见。真实踩过。
+
+     颜色只写 background 不写 color 是这类主题覆盖最容易漏的一处：
+     换掉底色时，前景色的假设也跟着变了。
+     ------------------------------------------------------------------------ */
+  color: var(--text);
 }
+
+/* 类型区分改用左侧色条，而不是整块底色 —— 白玻璃上叠彩色底块会显脏，
+   而 4px 的色条既保留"成功绿 / 失败红"的语义，又不影响文字对比度。 */
+.toast {
+  border-left: 4px solid var(--primary);
+}
+.toast--ok    { border-left-color: var(--success); }
+.toast--error { border-left-color: var(--danger); }
+.toast--info  { border-left-color: var(--primary); }
 
 .pager button {
   border-radius: var(--radius-xs);
