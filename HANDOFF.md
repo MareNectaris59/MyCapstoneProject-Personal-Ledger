@@ -66,6 +66,24 @@ $b = [IO.File]::ReadAllBytes('xxx.ps1')
 
 已因此失败的脚本：`build.ps1`、`backup-db.ps1`、`setup.ps1`、`test-subject-api.ps1`
 
+### 2.1b `Get-Content` 不带 `-Encoding UTF8` 会**数错行数**
+
+同一个坑的另一个变种，但后果不是报错而是**悄悄给出错误数字**。
+
+```powershell
+(Get-Content 'README.md').Count                          # 254  ← 错
+(Get-Content 'README.md' -Encoding UTF8).Count           # 359  ← 对
+```
+
+实测偏差很大（README 差 105 行、HANDOFF 差 96 行、数据库设计差 183 行），
+原因同 §2.1：PS 5.1 按 ANSI 代码页解码 UTF-8，多字节序列被拆散。
+
+**危险之处**：它不报错。若用它核对"文档写完了吗 / 行数对不对"，
+会得到一个小得多的数字而毫无察觉 —— 本人就据此在总结里写过错误的行数。
+
+**规则**：凡是用 `Get-Content` 做统计或判断，一律加 `-Encoding UTF8`；
+或者改用 `[IO.File]::ReadAllLines($path, [Text.Encoding]::UTF8).Count`。
+
 ### 2.2 `Set-Location` 在单条命令里可能不生效
 
 每个 `pwsh` 调用是**新进程**，工作目录回到工作区根。在同一命令里
