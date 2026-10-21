@@ -1,17 +1,25 @@
 # =============================================================================
-#  CI：后端构建 + 单元测试 + 全量端到端验收
+#  CI：构建 + 单元测试 + 端到端验收
 #
-#  为什么是 ubuntu-latest 而不是 windows-latest：
-#    1. 项目里的 .ps1 已经只依赖 PowerShell/.NET 的跨平台能力（System.Net.Http），
-#       pwsh 在 Linux 上同样能跑，不绑定 Windows；
-#    2. GitHub 的 Windows runner 不支持 service containers，起 MySQL 更麻烦；
-#    3. ubuntu 镜像自带 MySQL 8，启动即可用。
+#  为什么拆成两个 job：
+#    115 项 JUnit 单元测试**不需要数据库**（全是纯逻辑），
+#    却和需要 MySQL 的端到端测试绑在同一个 job 里 ——
+#    结果是 MySQL 一挂，连"代码能不能编译、单元测试过不过"都看不出来。
+#    现在 unit-tests 先跑，绿了才轮到 e2e，失败信息也更准。
 #
-#  注意（诚实记录）：
-#    本工作流编写时项目还没有远程仓库，**从未在 Actions 上真实跑过一次**。
-#    语法经过本地校验，但首次推送后仍可能需要微调（尤其是 MySQL 启动方式
-#    与 runner 镜像版本相关）。若首次运行失败，先看 "Start MySQL" 与
-#    "Wait for readiness" 两步。
+#  为什么 CI 里不需要 Node：
+#    前端构建产物（backend/src/main/resources/static/）已经入库，
+#    mvn package 只是把它打进 jar。想验证前端源码能构建，
+#    应当单独加一个 job，不属于当前这条链路。
+#
+#  首次运行失败过的记录（值得留档）：
+#    第一版在 "Start MySQL and create the database" 一步退出码 1，
+#    23 秒就挂，后面的步骤一步都没跑到。原因是直接用
+#    ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password 改 root：
+#      * ubuntu 镜像里 root@localhost 默认是 auth_socket 认证，
+#        改掉之后 CI 自己后续的 sudo mysql 免密登录立刻失效；
+#      * 且 mysql_native_password 在 MySQL 8.4 已被移除。
+#    现在改为**完全不碰 root**：另建一个专用账号 ledger@%，应用用它连接。
 # =============================================================================
 name: CI
 
@@ -22,19 +30,53 @@ on:
   workflow_dispatch:
 
 jobs:
-  backend-and-e2e:
-    name: Build, unit tests, e2e
+  # ---------------------------------------------------------------------------
+  # 1. 构建 + 单元测试：不依赖数据库，应该永远是最快、最可信的一道门
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    name: Build + unit tests
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      # package 会跑 surefire，也就是那 115 项单元测试
+      - name: Build and run unit tests
+        run: mvn -B -f backend/pom.xml clean package
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: backend/target/surefire-reports/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 2. 端到端：需要 MySQL + 运行中的应用
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: E2E (MySQL + 7 suites)
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    timeout-minutes: 30
 
     env:
-      # 与 application.yml 的默认值对齐，省去改配置
       DB_HOST: 127.0.0.1
       DB_PORT: '3306'
       DB_NAME: personal_ledger
-      DB_USERNAME: root
-      DB_PASSWORD: '123456'
-      # 测试期间用 INFO 即可，避免 DEBUG 刷出几十 MB 日志
+      # 专用账号，不是 root —— 见文件头的踩坑记录
+      DB_USERNAME: ledger
+      DB_PASSWORD: 'ledger_ci_pass'
       APP_LOG_LEVEL: INFO
 
     steps:
@@ -50,24 +92,46 @@ jobs:
 
       - name: Start MySQL and create the database
         run: |
-          sudo systemctl start mysql.service
-          # 等 mysqld 真正可用，避免下一步连不上
+          set -x
+          mysql --version || true
+
+          # 镜像里可能已经装好但没启动；enable --now 与 service 都试一次
+          sudo systemctl enable --now mysql 2>/dev/null || sudo service mysql start || true
+
+          # 等真正可用。socket 认证下 sudo mysqladmin 免密即可 ping 通
           for i in $(seq 1 30); do
-            if sudo mysqladmin ping --silent 2>/dev/null; then break; fi
+            if sudo mysqladmin ping --silent 2>/dev/null; then
+              echo "mysql is up after ${i}s"
+              break
+            fi
             sleep 1
           done
-          # 与应用默认口令对齐（本仓库的 application.yml 用 123456 作开发默认值）
-          sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '123456';"
-          sudo mysql -uroot -p123456 -e "CREATE DATABASE IF NOT EXISTS personal_ledger
-            DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
-          sudo mysql -uroot -p123456 -e "SELECT VERSION();"
 
-      - name: Build (runs JUnit unit tests via surefire)
-        run: mvn -B -f backend/pom.xml clean package
+          if ! sudo mysqladmin ping --silent 2>/dev/null; then
+            echo "::error::MySQL did not become ready in 30s"
+            sudo systemctl status mysql --no-pager || true
+            sudo journalctl -u mysql --no-pager | tail -60 || true
+            exit 1
+          fi
+
+          # 建库 + 建专用账号。root@localhost 保持 socket 认证不动。
+          sudo mysql <<'SQL'
+          CREATE DATABASE IF NOT EXISTS personal_ledger
+            DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+          CREATE USER IF NOT EXISTS 'ledger'@'%' IDENTIFIED BY 'ledger_ci_pass';
+          GRANT ALL PRIVILEGES ON personal_ledger.* TO 'ledger'@'%';
+          FLUSH PRIVILEGES;
+          SQL
+
+          # 用应用将要使用的那条路径（TCP + 口令）自证一次，避免后面才发现连不上
+          mysql -h 127.0.0.1 -P 3306 -uledger -pledger_ci_pass \
+            -e "SELECT VERSION() AS version;" personal_ledger
+
+      - name: Build the jar (tests already ran in the first job)
+        run: mvn -B -f backend/pom.xml package -DskipTests
 
       - name: Start the application
         run: |
-          # 从仓库根启动，日志会落在 <repo>/logs（与本地一致）
           nohup java -Dfile.encoding=UTF-8 \
             -jar backend/target/personal-ledger-1.0.0-SNAPSHOT.jar \
             > app-console.log 2>&1 &
@@ -75,44 +139,44 @@ jobs:
 
       - name: Wait for readiness
         run: |
-          for i in $(seq 1 60); do
+          for i in $(seq 1 90); do
             if curl -fsS -o /dev/null http://127.0.0.1:8080/; then
               echo "ready after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "::error::application did not become ready in 60s"
-          tail -n 80 app-console.log || true
+          echo "::error::application did not become ready in 90s"
+          tail -n 120 app-console.log || true
           exit 1
 
-      # 五个脚本分别成 step，失败时能一眼看出是哪一套挂了
-      - name: e2e - core ledger (test-api)
+      # 七个脚本分别成 step：哪一套挂了，一眼可见
+      - name: e2e - core ledger
         run: pwsh -NoProfile -File backend/test-api.ps1
 
-      - name: e2e - acceptance AC-03/04/05/07/13 (test-acceptance)
+      - name: e2e - acceptance AC-03/04/05/07/13
         run: pwsh -NoProfile -File backend/test-acceptance.ps1
 
-      - name: e2e - budget AC-08/09 (test-budget)
+      - name: e2e - budget AC-08/09
         run: pwsh -NoProfile -File backend/test-budget.ps1
 
-      - name: e2e - analysis AC-10/11 + export (test-analysis)
+      - name: e2e - analysis AC-10/11 + export
         run: pwsh -NoProfile -File backend/test-analysis.ps1
 
-      - name: e2e - profile, query, security (test-profile-query)
+      - name: e2e - profile, query, security
         run: pwsh -NoProfile -File backend/test-profile-query.ps1
 
-      - name: e2e - CSV export / import (test-import-export)
+      - name: e2e - CSV export / import
         run: pwsh -NoProfile -File backend/test-import-export.ps1
 
-      - name: e2e - recurring rules (test-recurring)
+      - name: e2e - recurring rules
         run: pwsh -NoProfile -File backend/test-recurring.ps1
 
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: logs
+          name: e2e-logs
           path: |
             app-console.log
             logs/
@@ -121,4 +185,4 @@ jobs:
       - name: Stop the application
         if: always()
         run: |
-          if [ -f app.pid ]; then kill "$(cat app.pid)" || true; fi
+          if [ -f app.pid ]; then kill "$(cat app.pid)" 2>/dev/null || true; fi
