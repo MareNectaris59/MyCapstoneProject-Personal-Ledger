@@ -164,15 +164,49 @@ public class LedgerController {
         return Result.success(ledgerCoreService.reverse(user.userId(), id, body.amount(), body.reason()));
     }
 
-    /** 借贷平衡全局校验（开发自检用） */
+    /**
+     * 借贷平衡全局校验（开发自检用）。
+     *
+     * <p><b>金额必须转成字符串再返回</b>。
+     * 这里曾经把 Mapper 查出的 {@code Map<String, BigDecimal>}
+     * 原样塞进响应，于是 Jackson 把 0.00 序列化成了
+     * JSON <b>数字</b>，而不是本项目全局约定的字符串。
+     *
+     * <p>后果很隐蔽：</p>
+     * <ul>
+     *   <li>浏览器 JS 里 {@code 0.00 === "0.00"} 不成立，但一般不会有人拿它做严格相等判断；</li>
+     *   <li>Windows PowerShell 5.1 把 0.00 解析成 [decimal]，保留标度，
+     *       打印出来仍是 "0.00"，于是本地测试一直是绿的；</li>
+     *   <li>PowerShell 7 解析成 [double]，打印出来是 "0"，
+     *       CI 上才暴露 —— 这个约定破口就是这样被发现的。</li>
+     * </ul>
+     */
     @GetMapping("/balance-check")
     public Result<Map<String, Object>> balanceCheck(@AuthenticationPrincipal CurrentUser user) {
+        Map<String, java.math.BigDecimal> raw = ledgerCoreService.globalBalanceCheck();
+        List<Map<String, Object>> rawDrift = ledgerCoreService.accountBalanceDrift();
+
+        Map<String, Object> global = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, java.math.BigDecimal> e : raw.entrySet()) {
+            global.put(e.getKey(), com.example.ledger.common.util.MoneyUtil.toPlainString(e.getValue()));
+        }
+
+        // 对账明细里的金额同样要转字符串，否则同一个端点上会出现两种类型
+        List<Map<String, Object>> drift = new java.util.ArrayList<>(rawDrift.size());
+        for (Map<String, Object> row : rawDrift) {
+            Map<String, Object> converted = new java.util.LinkedHashMap<>();
+            for (Map.Entry<String, Object> e : row.entrySet()) {
+                Object v = e.getValue();
+                converted.put(e.getKey(), v instanceof java.math.BigDecimal bd
+                        ? com.example.ledger.common.util.MoneyUtil.toPlainString(bd) : v);
+            }
+            drift.add(converted);
+        }
+
         Map<String, Object> result = new java.util.LinkedHashMap<>();
-        Map<String, java.math.BigDecimal> global = ledgerCoreService.globalBalanceCheck();
-        List<Map<String, Object>> drift = ledgerCoreService.accountBalanceDrift();
         result.put("globalBalance", global);
-        result.put("globalBalanced", global.get("diff") == null
-                || global.get("diff").compareTo(java.math.BigDecimal.ZERO) == 0);
+        result.put("globalBalanced", raw.get("diff") == null
+                || raw.get("diff").compareTo(java.math.BigDecimal.ZERO) == 0);
         result.put("accountDrift", drift);
         result.put("accountBalanced", drift.isEmpty());
         return Result.success(result);
