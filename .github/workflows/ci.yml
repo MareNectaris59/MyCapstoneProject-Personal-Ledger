@@ -19,7 +19,11 @@
 #      * ubuntu 镜像里 root@localhost 默认是 auth_socket 认证，
 #        改掉之后 CI 自己后续的 sudo mysql 免密登录立刻失效；
 #      * 且 mysql_native_password 在 MySQL 8.4 已被移除。
-#    现在改为**完全不碰 root**：另建一个专用账号 ledger@%，应用用它连接。
+#    第二版改成"另建专用账号 ledger@%"（完全不碰 root），仍然在同一步失败 ——
+#    说明真正的变量不是账号，而是 **runner 镜像里到底有没有 MySQL 服务**。
+#    ubuntu-latest 会随镜像版本滚动，预装软件不可当作契约。
+#    最终方案：用 Docker 服务容器（mysql:8.0），版本由我们自己钉死；
+#    健康检查等到就绪后再往下走。
 # =============================================================================
 name: CI
 
@@ -70,13 +74,36 @@ jobs:
     needs: unit-tests
     timeout-minutes: 30
 
+    # 用 Docker 服务容器，而不是依赖 runner 镜像里预装的 MySQL。
+    #
+    # 为什么要换（第二版 CI 的教训）：
+    #   第一版改了 root 口令、把自己登录方式堵死，已修；
+    #   第二版改成建专用账号，仍然在同一个步骤失败 —— 说明真正的
+    #   不确定性不是账号，而是**runner 镜像里到底有没有 MySQL 服务**。
+    #   ubuntu-latest 会随时间滚动到新版本镜像，预装软件是变动的；
+    #   服务容器的版本由我们自己钉死，行为可预期。
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_root_pass
+          MYSQL_DATABASE: personal_ledger
+        # 映射到 3307 而不是 3306：万一 runner 镜像里恰好有 MySQL 占着 3306，
+        # 端口绑定会直接失败。换个端口就与被预装了什么彻底无关。
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_root_pass"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
     env:
       DB_HOST: 127.0.0.1
-      DB_PORT: '3306'
+      DB_PORT: '3307'
       DB_NAME: personal_ledger
-      # 专用账号，不是 root —— 见文件头的踩坑记录
-      DB_USERNAME: ledger
-      DB_PASSWORD: 'ledger_ci_pass'
+      DB_USERNAME: root
+      DB_PASSWORD: 'ci_root_pass'
       APP_LOG_LEVEL: INFO
 
     steps:
@@ -90,41 +117,25 @@ jobs:
           java-version: '17'
           cache: maven
 
-      - name: Start MySQL and create the database
+      # 健康检查通常已经等到就绪；这一层是保险，且失败时能自己说话
+      - name: Verify the database is reachable
         run: |
           set -x
-          mysql --version || true
-
-          # 镜像里可能已经装好但没启动；enable --now 与 service 都试一次
-          sudo systemctl enable --now mysql 2>/dev/null || sudo service mysql start || true
-
-          # 等真正可用。socket 认证下 sudo mysqladmin 免密即可 ping 通
           for i in $(seq 1 30); do
-            if sudo mysqladmin ping --silent 2>/dev/null; then
+            if mysqladmin ping -h 127.0.0.1 -P 3307 -uroot -pci_root_pass --silent 2>/dev/null; then
               echo "mysql is up after ${i}s"
               break
             fi
-            sleep 1
+            sleep 2
           done
-
-          if ! sudo mysqladmin ping --silent 2>/dev/null; then
-            echo "::error::MySQL did not become ready in 30s"
-            sudo systemctl status mysql --no-pager || true
-            sudo journalctl -u mysql --no-pager | tail -60 || true
+          if ! mysqladmin ping -h 127.0.0.1 -P 3307 -uroot -pci_root_pass --silent 2>/dev/null; then
+            echo "::error::MySQL service container is not reachable on 127.0.0.1:3307"
+            docker ps -a || true
+            docker logs $(docker ps -aq --filter 'name=mysql') 2>&1 | tail -60 || true
             exit 1
           fi
-
-          # 建库 + 建专用账号。root@localhost 保持 socket 认证不动。
-          sudo mysql <<'SQL'
-          CREATE DATABASE IF NOT EXISTS personal_ledger
-            DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-          CREATE USER IF NOT EXISTS 'ledger'@'%' IDENTIFIED BY 'ledger_ci_pass';
-          GRANT ALL PRIVILEGES ON personal_ledger.* TO 'ledger'@'%';
-          FLUSH PRIVILEGES;
-          SQL
-
-          # 用应用将要使用的那条路径（TCP + 口令）自证一次，避免后面才发现连不上
-          mysql -h 127.0.0.1 -P 3306 -uledger -pledger_ci_pass \
+          # 用应用将要使用的那条路径自证一次
+          mysql -h 127.0.0.1 -P 3307 -uroot -pci_root_pass \
             -e "SELECT VERSION() AS version;" personal_ledger
 
       - name: Build the jar (tests already ran in the first job)
