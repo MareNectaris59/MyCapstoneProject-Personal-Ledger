@@ -136,11 +136,35 @@ function Invoke-Api {
 }
 
 function Check([string]$label, $actual, $expected) {
-    if ("$actual" -eq "$expected") {
-        Write-Host ("  [PASS] {0} = {1}" -f $label, $actual) -ForegroundColor Green
+    $got = "$actual"
+    $want = "$expected"
+
+    # Compatibility shim between Windows PowerShell 5.1 and PowerShell 7.
+    #
+    # 5.1 (what this was developed on) keeps JSON date strings as strings.
+    # PowerShell 7 -- which is what CI uses on Linux -- may hand back a [datetime],
+    # so "$actual" renders in the machine locale ("10/05/2026 00:00:00") instead of
+    # the wire format "2026-10-05", and every date assertion fails for a reason
+    # that has nothing to do with the application.
+    if ($got -ne $want) {
+        $left = [datetime]::MinValue
+        $right = [datetime]::MinValue
+        if ([datetime]::TryParse($got, [ref]$left) -and
+            [datetime]::TryParse($want, [ref]$right) -and
+            $left -eq $right) {
+            $got = $want
+        }
+    }
+
+    if ($got -eq $want) {
+        Write-Host ("  [PASS] {0} = {1}" -f $label, $got) -ForegroundColor Green
         $script:pass++
     } else {
-        Write-Host ("  [FAIL] {0} = {1}  (expected {2})" -f $label, $actual, $expected) -ForegroundColor Red
+        Write-Host ("  [FAIL] {0} = {1}  (expected {2})" -f $label, $got, $want) -ForegroundColor Red
+        # GitHub Actions annotation. CI cannot show the raw log to a program,
+        # but annotations are rendered on the run page -- so a failing assertion
+        # names itself without anyone opening the log.
+        Write-Host "::error title=$label::$label = $got (expected $want)"
         $script:fail++
     }
 }
