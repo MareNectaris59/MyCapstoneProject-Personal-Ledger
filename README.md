@@ -34,16 +34,53 @@
 
 ## 持续集成
 
-`.github/workflows/ci.yml` 会在每次推送时：
+[![CI](https://github.com/MareNectaris59/MyCaptoneProject-Personal-Ledger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MareNectaris59/MyCaptoneProject-Personal-Ledger/actions/workflows/ci.yml)
 
-1. 起 MySQL 并建库
-2. `mvn package`（含 JUnit 单元测试）
-3. 启动应用，等就绪
-4. 依次跑七套 PowerShell 端到端脚本
+拆成两个 job，因为它们的前提条件不同：
 
-> **注意**：这份工作流写好了但**尚未真实运行过** —— 项目还没有远程仓库，
-> 也就没有触发过 Actions。首次推送后若失败，先看「Start MySQL」与
-> 「Wait for readiness」两步（runner 镜像版本会影响 MySQL 启动方式）。
+| job | 做什么 | 依赖 |
+| --- | --- | --- |
+| `unit-tests` | `mvn package`（含 115 项 JUnit 单元测试） | 无（不连数据库） |
+| `e2e` | Docker 起 MySQL → 启动应用 → 七套脚本 381 项 | 需要数据库 |
+
+`e2e` 依赖 `unit-tests` 通过。这样一旦基础设施出问题，
+“能不能编译、单元测试过不过”这个信号不会连带失去。
+
+### 这套 CI 是在四次失败后才跑通的
+
+留在这里是因为每一次都是一类不同的错误：
+
+| # | 失败位置 | 根因 | 修法 |
+| --- | --- | --- | --- |
+| 1 | Start MySQL | `ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password` 把 root 的 socket 认证改掉了，CI 自己后续的免密登录立刻失效 | 不碰 root，另建专用账号 |
+| 2 | Start MySQL | 仍失败 —— 真正的变量不是账号，而是**runner 镜像里到底有没有 MySQL 服务** | 改用 Docker 服务容器，版本自己钉死；端口映射到 3307 避开冲突 |
+| 3 | e2e - core ledger | 日期断言失败：PowerShell 7 把 JSON 数字解析成 `[double]`，`0.00` 变成 `0` | （下一行是真正的修法） |
+| 4 | e2e - profile, query | 同一类：金额被序列化成 JSON 数字，而不是项目约定的字符串 | **后端修复**：Jackson 全局把 `BigDecimal` 写成字符串 |
+
+第 3–4 条是 CI 的真正价值所在：它抓出两处**长期存在、
+本地永远测不出来**的 API 约定破口。
+原因在于本地用 Windows PowerShell 5.1，它把 JSON 数字 `0.00`
+解析成 `[decimal]` 并保留标度，打印出来仍是 `"0.00"`。
+
+> 结论：**只在一种解释器上跑测试，等于给类型约定破口发长期豁免证。**
+> CI 的价值不在于“再跑一遍”，而在于换了个环境。
+
+### CI 失败时怎么看
+
+端到端脚本的 `Check` 在失败时会额外输出一行
+`::error title=…`，于是**失败断言会直接出现在 Actions 运行页的注解区**，
+不必点进日志才能知道哪条断言炸了。
+
+### 推送时连不上 GitHub
+
+如果系统代理开着但 git 报 `Failed to connect to github.com port 443`，
+是因为 **git 不读 Windows 的系统代理**（浏览器和 PowerShell 会读）。
+给仓库单独配一下：
+
+```powershell
+git config --local http.proxy  http://127.0.0.1:7897
+git config --local https.proxy http://127.0.0.1:7897
+```
 
 ## 日志
 

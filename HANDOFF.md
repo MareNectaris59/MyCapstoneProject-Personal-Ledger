@@ -85,6 +85,36 @@ $b = [IO.File]::ReadAllBytes('xxx.ps1')
 **规则**：凡是用 `Get-Content` 做统计或判断，一律加 `-Encoding UTF8`；
 或者改用 `[IO.File]::ReadAllLines($path, [Text.Encoding]::UTF8).Count`。
 
+### 2.1c PowerShell 5.1 与 PowerShell 7 对同一份 JSON 的理解不同
+
+本地开发一直用 **Windows PowerShell 5.1**，而 CI（ubuntu + pwsh）用 **PowerShell 7**。
+差异在于 JSON 数字的解析：
+
+```powershell
+'{"diff":0.00}' | ConvertFrom-Json | % { $_.diff.GetType().Name }
+#  5.1 -> Decimal   "$($_.diff)"  =>  "0.00"   保留标度
+#  7.x -> Double    "$($_.diff)"  =>  "0"      标度丢失
+```
+
+直接后果：所有将金额与 `'0.00'` 做字符串比较的断言，
+**在本地永远是绿的，到 CI 就失败**。这个差异帮我们抓出了两处真实缺陷：
+接口把金额序列化成了 JSON 数字，违反“金额一律字符串”的约定。
+
+现已修（Jackson 全局序列化 BigDecimal 为字符串），并在 `Check` 里加了日期容错。
+**但这条经验要记住：只在 5.1 上跑测试，等于给类型破口发豁免证。**
+
+### 2.1d git 不读 Windows 系统代理
+
+系统代理开着（比如 `127.0.0.1:7897`）时，浏览器与 PowerShell 都能访问 GitHub，
+但 `git push` 会报 `Failed to connect to github.com port 443` —— git 直连，不读 WinINET 代理。
+
+```powershell
+git config --local http.proxy  http://127.0.0.1:7897
+git config --local https.proxy http://127.0.0.1:7897
+```
+
+用 `--local` 而不是 `--global`：代理关了以后，全局设置会让所有仓库都连不上。
+
 ### 2.2 `Set-Location` 在单条命令里可能不生效
 
 每个 `pwsh` 调用是**新进程**，工作目录回到工作区根。在同一命令里
