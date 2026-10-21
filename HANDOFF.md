@@ -28,9 +28,11 @@ Get-Content README.md -TotalCount 40
 | 项 | 现状 |
 | --- | --- |
 | 工作目录 | `D:\Capstone Project` |
-| 分支 / HEAD | `main` / `2c8cc5e`（唯一长期分支，Aero 实验分支已合并删除） |
-| 提交数 | 28 |
-| 跟踪文件 | 149 个（约 1.7 MB） |
+| 分支 | `main`（唯一长期分支，Aero 实验分支已合并删除） |
+| 远程仓库 | [https://github.com/MareNectaris59/MyCapstoneProject-Personal-Ledger](https://github.com/MareNectaris59/MyCapstoneProject-Personal-Ledger)（公开），与本地同步 |
+| HEAD | 不写死哈希 —— 每次提交都会过期。用 `git log --oneline -1` 查 |
+| 提交数 | 48 |
+| 跟踪文件 | 165 个（`.git` 约 4.4 MB） |
 | 工具链 | JDK 17.0.7、Maven 3.9.3、MySQL 8.0.31、Node v26.11.1 |
 | 数据库 | `personal_ledger`，Flyway 已迁移至 **v5** |
 | 后端测试 | **单元测试 115 项 + 端到端七套 381 项全通过**，AC-01~13 全覆盖 |
@@ -353,10 +355,8 @@ level 3        50010101 早餐              8 位 = 父编码 + 2 位
 
 | | 任务 | 说明 |
 | --- | --- | --- |
-| **1** | 推到远程仓库 | 目前只有本机 + U 盘，毕设数据有丢失风险。**用户暂未提供仓库地址**，是唯一真正的待办 |
-| **2** | 邮箱验证码激活（FR-U-01/05/06） | 需 SMTP + Redis。`POST /auth/code` 现为占位，直接返回"邮件服务尚未接入" |
-| **3** | 数据导入 | 与导出对称，未做 |
-| **4** | 部署（Nginx/HTTPS） | 未开始 |
+| **1** | 邮箱验证码激活（FR-U-01/05/06） | 需 SMTP + Redis。`POST /auth/code` 现为占位，直接返回"邮件服务尚未接入" |
+| **2** | 部署（Nginx/HTTPS） | 未开始 |
 
 **明确不做的**（有理由，不是没时间）：
 - 修改头像：界面没有任何头像展示位，存了也看不到

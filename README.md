@@ -34,7 +34,7 @@
 
 ## 持续集成
 
-[![CI](https://github.com/MareNectaris59/MyCaptoneProject-Personal-Ledger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MareNectaris59/MyCaptoneProject-Personal-Ledger/actions/workflows/ci.yml)
+[![CI](https://github.com/MareNectaris59/MyCapstoneProject-Personal-Ledger/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MareNectaris59/MyCapstoneProject-Personal-Ledger/actions/workflows/ci.yml)
 
 拆成两个 job，因为它们的前提条件不同：
 
